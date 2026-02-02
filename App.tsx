@@ -1180,6 +1180,71 @@ const App: React.FC = () => {
         }
     };
 
+
+    // --- Display Metrics Hooks (Moved Up to avoid TDZ in endGame) ---
+    // Persist AI Run Flag
+    useEffect(() => {
+        if (isWorkerReady && !isWebLoading) {
+            localStorage.setItem('has_run_ai_before', 'true');
+        }
+    }, [isWorkerReady, isWebLoading]);
+
+    // Win Rate Calculation
+    const displayWinRate = useMemo(() => {
+        let rate = calculateWinRate(gameState.board); // Default Heuristic
+        if (settings.showWinRate && !gameState.gameOver && gameState.appMode === 'playing' && settings.gameType === 'Go') {
+            const aiColor = settings.userColor === 'black' ? 'white' : 'black';
+            if (useCloud && cloudWinRate !== 50) {
+                rate = (aiColor === 'white') ? (100 - cloudWinRate) : cloudWinRate;
+            }
+            else if (isElectronAvailable && electronWinRate !== 50) {
+                rate = (aiColor === 'white') ? (100 - electronWinRate) : electronWinRate;
+            } 
+            else if (!isElectronAvailable && isWorkerReady && settings.gameMode === 'PvAI' && webWinRate !== 50) {
+                rate = (aiColor === 'white') ? (100 - webWinRate) : webWinRate;
+            }
+        }
+        if (settings.showWinRate && !gameState.gameOver && gameState.appMode === 'playing' && settings.gameType === 'Gomoku') {
+            rate = calculateGomokuWinRate(gameState.board);
+        }
+        return rate;
+    }, [gameState.board, settings.showWinRate, gameState.gameOver, gameState.appMode, settings.gameType, settings.userColor, useCloud, cloudWinRate, isElectronAvailable, electronWinRate, isWorkerReady, settings.gameMode, webWinRate]);
+
+    // Lead Calculation
+    const displayLead = useMemo(() => {
+        let lead: number | null = null;
+        const aiColor = settings.userColor === 'black' ? 'white' : 'black';
+        if (settings.gameMode === 'PvAI') {
+            if (useCloud && cloudLead !== null) {
+                lead = (aiColor === 'white') ? -cloudLead : cloudLead;
+            }
+            else if (!isElectronAvailable && webLead !== null && isWorkerReady) {
+                lead = (aiColor === 'white') ? -webLead : webLead;
+            }
+        }
+        return lead;
+    }, [settings.gameMode, useCloud, cloudLead, settings.userColor, isElectronAvailable, webLead, isWorkerReady]);
+
+    // Territory (Ownership)
+    const displayTerritory = useMemo(() => {
+        if (settings.gameMode !== 'PvAI') return null;
+        const aiColor = settings.userColor === 'black' ? 'white' : 'black';
+        
+        if (useCloud && cloudTerritory) {
+            if (aiColor === 'white') {
+                const flipped = new Float32Array(cloudTerritory.length);
+                for (let i = 0; i < cloudTerritory.length; i++) {
+                    flipped[i] = -cloudTerritory[i];
+                }
+                return flipped;
+            }
+            return cloudTerritory;
+        } else if (!isElectronAvailable) {
+            return webTerritory;
+        }
+        return null;
+    }, [settings.gameMode, settings.userColor, useCloud, cloudTerritory, isElectronAvailable, webTerritory]);
+
     // --- Tsumego End Check ---
     useEffect(() => {
         if (settings.gameMode === 'Tsumego' && tsumegoCurrentNode) {
@@ -1291,7 +1356,16 @@ const App: React.FC = () => {
 
         if (session?.user?.id && (settings.gameMode === 'PvAI' || onlineStatus === 'connected')) {
             const myPlayerColor = onlineStatus === 'connected' ? myColor : settings.userColor;
-            const currentScore = calculateScore(gameState.boardRef.current);
+            
+            // [Optimized] AI-Assisted Scoring: Remove Dead Stones
+            let finalBoard = gameState.boardRef.current;
+            if (settings.gameMode === 'PvAI' && displayTerritory && displayTerritory.length === settings.boardSize * settings.boardSize) {
+                 console.log("[EndGame] Applying AI Dead Stone Removal...");
+                 finalBoard = cleanBoardWithTerritory(finalBoard, displayTerritory);
+                 gameState.setBoard(finalBoard); // Visual Update for user
+            }
+
+            const currentScore = calculateScore(finalBoard);
             checkEndGameAchievements({
                winner: winnerColor, myColor: myPlayerColor || 'black', 
                score: currentScore, captures: { black: gameState.blackCaptures, white: gameState.whiteCaptures },
@@ -1350,7 +1424,7 @@ const App: React.FC = () => {
 
             fetchProfile(session.user.id);
         }
-    }, [gameState.blackCaptures, gameState.whiteCaptures, settings.boardSize, settings.difficulty, settings.gameMode, settings.userColor, session, userProfile, opponentProfile, myColor, onlineStatus, gameState.setGameOver, gameState.setWinner, gameState.setWinReason, vibrate, playSfx, gameState.boardRef, checkEndGameAchievements, calculateScore, calculateElo, setEloDiffText, setEloDiffStyle, supabase, calculateNewRating, fetchProfile]);
+    }, [gameState.blackCaptures, gameState.whiteCaptures, settings.boardSize, settings.difficulty, settings.gameMode, settings.userColor, session, userProfile, opponentProfile, myColor, onlineStatus, gameState.setGameOver, gameState.setWinner, gameState.setWinReason, vibrate, playSfx, gameState.boardRef, checkEndGameAchievements, calculateScore, calculateElo, setEloDiffText, setEloDiffStyle, supabase, calculateNewRating, fetchProfile, displayTerritory]);
 
     const executeMove = useCallback((x: number, y: number, isRemote: boolean) => {
         const currentBoard = gameState.boardRef.current; 
@@ -1976,72 +2050,7 @@ const App: React.FC = () => {
         } catch (e) { setUpdateMsg('检查失败'); } finally { setCheckingUpdate(false); }
     };
     
-    // Win Rate Calculation for Display (Normalized to Black Win %)
-    const displayWinRate = useMemo(() => {
-        let rate = calculateWinRate(gameState.board); // Default Heuristic
-        if (settings.showWinRate && !gameState.gameOver && gameState.appMode === 'playing' && settings.gameType === 'Go') {
-            const aiColor = settings.userColor === 'black' ? 'white' : 'black';
-            if (useCloud && cloudWinRate !== 50) {
-                rate = (aiColor === 'white') ? (100 - cloudWinRate) : cloudWinRate;
-            }
-            else if (isElectronAvailable && electronWinRate !== 50) {
-                rate = (aiColor === 'white') ? (100 - electronWinRate) : electronWinRate;
-            } 
-            else if (!isElectronAvailable && isWorkerReady && settings.gameMode === 'PvAI' && webWinRate !== 50) {
-                rate = (aiColor === 'white') ? (100 - webWinRate) : webWinRate;
-            }
-        }
-        if (settings.showWinRate && !gameState.gameOver && gameState.appMode === 'playing' && settings.gameType === 'Gomoku') {
-            rate = calculateGomokuWinRate(gameState.board);
-        }
-        return rate;
-    }, [gameState.board, settings.showWinRate, gameState.gameOver, gameState.appMode, settings.gameType, settings.userColor, useCloud, cloudWinRate, isElectronAvailable, electronWinRate, isWorkerReady, settings.gameMode, webWinRate]);
 
-    // Lead Calculation (Normalized to Black Lead)
-    const displayLead = useMemo(() => {
-        let lead: number | null = null;
-        const aiColor = settings.userColor === 'black' ? 'white' : 'black';
-        if (settings.gameMode === 'PvAI') {
-            if (useCloud && cloudLead !== null) {
-                lead = (aiColor === 'white') ? -cloudLead : cloudLead;
-            }
-            else if (!isElectronAvailable && webLead !== null && isWorkerReady) {
-                lead = (aiColor === 'white') ? -webLead : webLead;
-            }
-        }
-        return lead;
-    }, [settings.gameMode, useCloud, cloudLead, settings.userColor, isElectronAvailable, webLead, isWorkerReady]);
-
-    // Territory Calculation (Ownership)
-    const displayTerritory = useMemo(() => {
-        if (settings.gameMode !== 'PvAI') return null;
-        const aiColor = settings.userColor === 'black' ? 'white' : 'black';
-        
-        if (useCloud && cloudTerritory) {
-            // Flip territory if AI is White (since Cloud results are likely relative to the mover)
-            if (aiColor === 'white') {
-                const flipped = new Float32Array(cloudTerritory.length);
-                for (let i = 0; i < cloudTerritory.length; i++) {
-                    flipped[i] = -cloudTerritory[i];
-                }
-                return flipped;
-            }
-            return cloudTerritory;
-        } else if (!isElectronAvailable) {
-            return webTerritory;
-        }
-        return null;
-    }, [settings.gameMode, settings.userColor, useCloud, cloudTerritory, isElectronAvailable, webTerritory]);
-
-
-
-
-    // --- Persist AI Run Flag ---
-    useEffect(() => {
-        if (isWorkerReady && !isWebLoading) {
-            localStorage.setItem('has_run_ai_before', 'true');
-        }
-    }, [isWorkerReady, isWebLoading]);
 
     return (
         <div className="h-full w-full bg-[#f7e7ce] flex flex-col landscape:flex-row items-center relative select-none overflow-y-auto landscape:overflow-hidden text-[#5c4033]">

@@ -316,6 +316,14 @@ export const useWebKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign, onAiEr
         setIsLoading(false);
         setInitStatus('');
         expectingResponseRef.current = false;
+        
+        // [Performance Fix] Explicitly release AI Engine memory between games.
+        // This prevents memory leaks/accumulation in WASM heap or OnnxRuntime session related to history.
+        // The worker will auto-reinitialize the engine on the next move request.
+        if (workerRef.current) {
+             console.log("[WebAI] Sending RELEASE command to worker for cleanup.");
+             workerRef.current.postMessage({ type: 'release' });
+        }
     }, []);
 
     // Page Visibility (Battery Save)
