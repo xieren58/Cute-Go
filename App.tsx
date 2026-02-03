@@ -1647,7 +1647,7 @@ const App: React.FC = () => {
           // This prevents "AI requested but not ready" errors and missed moves on startup
           if (settings.gameType === 'Go' && !useCloud) {
               if (isElectronAvailable && electronAiEngine.isInitializing) return;
-              if (!isElectronAvailable && !webAiEngine.isWorkerReady) return;
+              // [Modification] Allow falling through even if !isWorkerReady, so requestWebAiMove can trigger Lazy Init
           }
           // [Fix] All Go games now use the high-level path (Worker or Electron) for robust Ko handling
           // Only Gomoku stays in the local main-thread logic.

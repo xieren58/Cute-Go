@@ -1,4 +1,4 @@
-export type BoardThemeId = 'wood';
+export type BoardThemeId = 'wood' | 'realistic_wood';
 export type StoneThemeId = 'classic' | 'minimal';
 
 export interface BoardTheme {
@@ -33,6 +33,17 @@ export const BOARD_THEMES: Record<BoardThemeId, BoardTheme> = {
     lineColor: '#5c4033',
     labelColor: '#5c4033',
     starPointColor: '#5c4033',
+    borderColor: '#e3c086'
+  },
+  realistic_wood: {
+    id: 'realistic_wood',
+    name: '真实榧木',
+    background: '#e3c086',
+    backgroundImage: 'url("/assets/board_kaya.png")',
+    backgroundSize: '512px 512px', // Seamless tiling
+    lineColor: '#2d1b0e', // Darker lines for better contrast against rich wood
+    labelColor: '#2d1b0e',
+    starPointColor: '#2d1b0e',
     borderColor: '#e3c086'
   }
 };

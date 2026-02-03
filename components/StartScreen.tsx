@@ -1,5 +1,6 @@
 import React from 'react';
 import { Play, Cloud, Cpu, BookOpen, Globe, Download, Settings, Heart, Zap, Info, HelpCircle, PenTool, User as UserIcon, Palette } from 'lucide-react';
+import { CURRENT_VERSION } from '../utils/constants';
 
 interface StartScreenProps {
   onStartGame: (mode: 'PvP' | 'PvAI', aiType?: 'cloud' | 'local') => void;
@@ -109,7 +110,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             </div>
 
             <div className="mt-4 md:mt-8 text-[#8c6b38]/60 text-xs md:text-sm font-medium pb-4">
-                v2.3.0 • Designed with <Heart size={12} className="inline text-red-400 fill-current" /> by Yokaku
+                v{CURRENT_VERSION} • Designed with <Heart size={12} className="inline text-red-400 fill-current" /> by Yokaku
             </div>
         </div>
       </div>

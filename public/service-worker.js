@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cute-go-v2';
+const CACHE_NAME = 'cute-go-v3';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -17,8 +17,15 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
+  const url = new URL(request.url);
 
-  // HTML 文档使用网络优先，避免缓存旧 index.html
+  // 1. Supabase API & Non-GET -> Network Only (CRITICAL FIX)
+  if (url.hostname.includes('supabase.co') || request.method !== 'GET') {
+    event.respondWith(fetch(request));
+    return;
+  }
+
+  // 2. HTML 文档使用网络优先，避免缓存旧 index.html
   if (request.mode === 'navigate' || request.destination === 'document') {
     event.respondWith(
       fetch(request)
@@ -32,7 +39,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 其它静态资源缓存优先 (仅限 GET 请求)
+  // 3. 其它静态资源缓存优先 (仅限 GET 请求)
   event.respondWith(
     caches.match(request).then((response) => {
       if (response) return response;
@@ -61,3 +68,4 @@ self.addEventListener('activate', (event) => {
   );
   self.clients.claim();
 });
+
