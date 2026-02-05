@@ -54,84 +54,99 @@ export const TsumegoHub: React.FC<TsumegoHubProps> = ({ onClose, onSelectLevel, 
     };
 
     return (
-        <div className="fixed inset-0 bg-[#fcf6ea]/95 backdrop-blur-md z-[60] flex flex-col animate-in fade-in duration-300 overflow-hidden">
-             {/* Header */}
-             <div className="flex items-center justify-between p-6 border-b-4 border-[#e3c086] bg-white/50 relative z-10 shrink-0">
-                <div className="flex items-center gap-4">
-                    {(selectedCategory || selectedGroup) && (
-                        <button 
-                            onClick={handleBack}
-                            className="p-2 -ml-2 rounded-full hover:bg-[#e3c086] transition-colors active:scale-95 text-[#5c4033]"
-                        >
-                            <ArrowLeft size={28} strokeWidth={2.5} />
-                        </button>
-                    )}
-                    <div className="flex flex-col">
-                        <h1 className="text-2xl font-black text-[#5c4033] flex items-center gap-2">
-                             {selectedGroup || (selectedCategory ? selectedCategory.name : "死活闯关")}
-                        </h1>
-                        <span className="text-sm font-bold text-[#8c6b38] opacity-70 tracking-wider">
-                            {loading ? 'Reading library...' : selectedGroup ? 'Select Level' : 'Life and Death Challenge'}
-                        </span>
-                    </div>
-                </div>
-                <button 
-                    onClick={onClose}
-                    className="w-12 h-12 rounded-2xl bg-white border-4 border-[#e3c086] flex items-center justify-center text-[#5c4033] hover:bg-[#e3c086] transition-colors active:scale-95 shadow-sm"
-                >
-                    <X size={24} />
-                </button>
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-hidden relative w-full max-w-6xl mx-auto">
-                {loading ? (
-                     <div className="flex flex-col items-center justify-center h-full text-[#8c6b38]">
-                         <Loader2 size={48} className="animate-spin mb-4" />
-                         <p className="font-bold">Loading Problems...</p>
-                     </div>
-                ) : !selectedCategory ? (
-                    /* Skip Category List - Auto-loading Life & Death */
-                    <div className="flex flex-col items-center justify-center h-full text-[#8c6b38]">
-                        <Loader2 size={48} className="animate-spin mb-4" />
-                        <p className="font-bold">正在进入死活闯关...</p>
-                    </div>
-                ) : (selectedCategory.children.some((c: any) => c.isGroup) && !selectedGroup) ? (
-                    /* Group List */
-                    <div className="h-full overflow-y-auto p-6 custom-scrollbar">
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-fade-in-up">
-                            {selectedCategory.children.filter((c: any) => c.isGroup).map((child: any, idx) => (
-                                <button 
-                                    key={child.name}
-                                    onClick={() => setSelectedGroup(child.name)}
-                                    className="bg-[#f5e6d3] p-6 rounded-2xl border-2 border-[#dcc096] 
-                                             hover:border-[#8b5a2b] hover:shadow-lg hover:-translate-y-1 transition-all active:scale-95
-                                             flex flex-col items-center justify-center gap-4 aspect-[4/3] group"
-                                    style={{ animationDelay: `${idx * 30}ms` }}
-                                >
-                                    <Folder className="w-12 h-12 text-[#d4a04d] group-hover:text-[#8b5a2b] transition-colors" fill="currentColor" fillOpacity={0.2} />
-                                    <span className="text-[#5c4033] font-bold text-lg text-center line-clamp-2 md:text-xl">{child.name as string}</span>
-                                    <span className="text-sm text-[#8b5a2b]/70 font-medium bg-[#e3c086]/30 px-3 py-1 rounded-full">
-                                        {(child as any).files.length} 题
-                                    </span>
-                                </button>
-                            ))}
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
+             {/* Main Modal Window - Retro Wood Style */}
+             <div className="bg-[#fcf6ea] w-full max-w-5xl h-[85vh] rounded-3xl border-4 border-[#8c6b38] shadow-2xl flex flex-col overflow-hidden relative animate-scale-up">
+                 
+                 {/* Header */}
+                 <div className="bg-[#e3c086] p-4 flex items-center justify-between shrink-0 border-b-4 border-[#cba367]">
+                    <div className="flex items-center gap-3">
+                        {(selectedCategory || selectedGroup) && (
+                            <button 
+                                onClick={handleBack}
+                                className="w-10 h-10 rounded-xl bg-[#fcf6ea] border-b-4 border-[#cba367] flex items-center justify-center text-[#5c4033] hover:bg-white active:border-b-0 active:translate-y-1 transition-all"
+                            >
+                                <ArrowLeft size={24} strokeWidth={3} />
+                            </button>
+                        )}
+                        <div className="flex flex-col">
+                            <h1 className="text-xl font-black text-[#5c4033] flex items-center gap-2 drop-shadow-sm">
+                                <Trophy size={24} className="text-[#8c6b38]" />
+                                {selectedGroup || (selectedCategory ? selectedCategory.name : "死活闯关")}
+                            </h1>
+                            <span className="text-xs font-bold text-[#8c6b38] opacity-80 tracking-wider uppercase">
+                                {loading ? 'Reading library...' : selectedGroup ? 'Select Level' : '题目来源于网络，可能存在错误，侵权请联系我删除'}
+                            </span>
                         </div>
                     </div>
-                ) : (
-                    /* Level Grid */
-                    <LevelGrid 
-                        category={selectedCategory} 
-                        groupName={selectedGroup || undefined}
-                        completedIds={completedLevelIds} 
-                        onSelectLevel={onSelectLevel}
-                        onBack={handleBack}
+
+                    <button 
+                        onClick={onClose}
+                        className="w-10 h-10 rounded-xl bg-[#fcf6ea] border-b-4 border-[#cba367] flex items-center justify-center text-[#5c4033] hover:bg-white active:border-b-0 active:translate-y-1 transition-all"
+                    >
+                        <X size={24} strokeWidth={3} />
+                    </button>
+                </div>
+
+                {/* Content Area */}
+                <div className="flex-1 overflow-hidden relative bg-[#fcf6ea]"> 
+                    {/* Background Pattern */}
+                    <div className="absolute inset-0 opacity-10 pointer-events-none" 
+                         style={{ backgroundImage: 'radial-gradient(#8c6b38 4%, transparent 4%)', backgroundSize: '24px 24px' }} 
                     />
-                )}
+
+                    <div className="relative h-full z-10">
+                        {loading ? (
+                             <div className="flex flex-col items-center justify-center h-full text-[#8c6b38] gap-4">
+                                 <Loader2 size={48} className="animate-spin" />
+                                 <p className="font-bold text-lg">正在读取棋谱库...</p>
+                             </div>
+                        ) : !selectedCategory ? (
+                            /* Skip Category List - Auto-loading Life & Death */
+                            <div className="flex flex-col items-center justify-center h-full text-[#8c6b38]">
+                                <Loader2 size={48} className="animate-spin mb-4" />
+                                <p className="font-bold">正在进入死活闯关...</p>
+                            </div>
+                        ) : (selectedCategory.children.some((c: any) => c.isGroup) && !selectedGroup) ? (
+                            /* Group List */
+                            <div className="h-full overflow-y-auto p-6 custom-scrollbar">
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-fade-in-up">
+                                    {selectedCategory.children.filter((c: any) => c.isGroup).map((child: any, idx) => (
+                                        <button 
+                                            key={child.name}
+                                            onClick={() => setSelectedGroup(child.name)}
+                                            className="btn-retro bg-[#fcf6ea] p-4 rounded-xl border border-[#cba367] 
+                                                     hover:bg-white flex flex-col items-center justify-center gap-3 aspect-[4/3] group"
+                                            style={{ animationDelay: `${idx * 30}ms` }}
+                                        >
+                                            <div className="p-3 rounded-full bg-[#f3e5d0] group-hover:bg-[#e3c086] transition-colors">
+                                                <Folder className="w-8 h-8 text-[#8c6b38]" strokeWidth={2.5} />
+                                            </div>
+                                            <div className="flex flex-col items-center gap-1">
+                                                <span className="text-[#5c4033] font-black text-lg text-center line-clamp-1">{child.name as string}</span>
+                                                <span className="text-xs text-[#8c6b38] font-bold bg-[#e3c086]/20 px-2 py-0.5 rounded-full">
+                                                    {(child as any).files.length} 题
+                                                </span>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            /* Level Grid */
+                            <div className="h-full p-4 overflow-hidden">
+                                <LevelGrid 
+                                    category={selectedCategory} 
+                                    groupName={selectedGroup || undefined}
+                                    completedIds={completedLevelIds} 
+                                    onSelectLevel={onSelectLevel}
+                                    onBack={handleBack}
+                                />
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
-            
-            {/* Footer Decoration */}
-            <div className="h-12 bg-gradient-to-t from-[#e3c086]/20 to-transparent pointer-events-none shrink-0" />
         </div>
     );
 };

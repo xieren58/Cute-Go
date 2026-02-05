@@ -1,5 +1,13 @@
 import { OnnxEngine, type AnalysisResult } from '../utils/onnx-engine';
 import { MicroBoard, type Sign } from '../utils/micro-board';
+import { 
+    getCandidateMoves, 
+    getGomokuScore, 
+    checkGomokuWin, 
+    evaluatePositionStrength, 
+    GOMOKU_SCORES 
+} from '../utils/goLogic';
+import { BoardState, Player, Point } from '../types';
 
 
 // Define message types
@@ -16,10 +24,11 @@ type WorkerMessage =
             history: any[]; // HistoryItem[]
             color: 'black' | 'white';
             size: number;
+            gameType?: 'Go' | 'Gomoku'; // [New]
             simulations?: number;
             komi?: number;
             difficulty?: 'Easy' | 'Medium' | 'Hard';
-            temperature?: number; // [New]
+            temperature?: number;
       } }
     | { type: 'stop' }
     | { type: 'release' }
@@ -157,8 +166,136 @@ ctx.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             ctx.postMessage({ type: 'init-complete' });
 
         } else if (msg.type === 'compute') {
-            const { board: boardState, history: gameHistory, color, size, komi, difficulty, temperature } = msg.data;
-            
+            const { board: boardState, history: gameHistory, color, size, gameType = 'Go', komi, difficulty, temperature } = msg.data;
+
+            // === Gomoku Logic ===
+            if (gameType === 'Gomoku') {
+                const board = boardState as BoardState;
+                const player = color;
+                const opColor = player === 'black' ? 'white' : 'black';
+
+                // 1. Initial Candidates & Safety Check
+                // Fast path: if board is empty, play center
+                let hasStone = false;
+                for(let r=0; r<size; r++) for(let c=0; c<size; c++) if(board[r][c]) { hasStone = true; break; }
+                if (!hasStone) {
+                    const center = Math.floor(size/2);
+                    ctx.postMessage({ type: 'ai-response', data: { move: {x: center, y: center}, winRate: 0.5, lead: 0 } });
+                    return;
+                }
+
+                // 2. Iterative Deepening Setup
+                const isHard = difficulty === 'Hard';
+                const isMedium = difficulty === 'Medium';
+                
+                let maxDepth = isHard ? 8 : (isMedium ? 4 : 2); // Depth limit
+                // Time limit: prevent UI freeze (or pure worker lag)
+                // Worker can run longer. 
+                // Easy: 100ms, Medium: 800ms, Hard: 3000ms
+                const timeLimit = isHard ? 3000 : (isMedium ? 800 : 100); 
+                const startTime = performance.now();
+
+                // Get Initial Candidates
+                const candidates = getCandidateMoves(board, size, 2);
+                
+                // Pre-Sort candidates by static score for Iterative Deepening efficiency
+                // This gives us a good move ordering for Alpha-Beta
+                const rootMoves = candidates.map(pt => ({
+                    pt,
+                    score: getGomokuScore(board, pt.x, pt.y, player, opColor, false)
+                })).sort((a,b) => b.score - a.score);
+
+                // Check Instant Win (Depth 0)
+                if (rootMoves.length > 0 && rootMoves[0].score >= GOMOKU_SCORES.WIN) {
+                     ctx.postMessage({ type: 'ai-response', data: { move: rootMoves[0].pt, winRate: 1.0, lead: 100 } });
+                     return;
+                }
+
+                // Top K Pruning for Root
+                const searchWidth = isHard ? 12 : (isMedium ? 8 : 5);
+                const movesToSearch = rootMoves.slice(0, searchWidth).map(m => m.pt);
+
+                let bestMove = movesToSearch[0];
+                let currentBestScore = -Infinity;
+
+                // --- Helper: Minimax (Local Recurse) ---
+                const performSearch = (depth: number) => {
+                    let alpha = -Infinity; // Root Alpha
+                    const beta = Infinity;
+                    let iterationBestMove = bestMove;
+                    let iterationBestScore = -Infinity;
+
+                    for (const move of movesToSearch) {
+                        if (performance.now() - startTime > timeLimit) break;
+
+                        // Do Move
+                        board[move.y][move.x] = { color: player, x: move.x, y: move.y, id: 'sim' };
+                        
+                        // Recurse
+                        // Next is Min (Opponent)
+                        const score = minimaxGomokuRecursive(
+                            board, depth - 1, alpha, beta, false, player, move
+                        );
+
+                        // Undo Move
+                        board[move.y][move.x] = null;
+
+                        if (score > iterationBestScore) {
+                            iterationBestScore = score;
+                            iterationBestMove = move;
+                        }
+
+                        // Alpha Update (Root)
+                        if (score > alpha) {
+                            alpha = score;
+                        }
+                        // No beta cutoff at root (we want to find best)
+                    }
+                    return { bestM: iterationBestMove, bestS: iterationBestScore };
+                };
+                
+                // Iterative Deepening Loop
+                for (let d = 2; d <= maxDepth; d += 2) {
+                    const { bestM, bestS } = performSearch(d);
+                    
+                    // If we found a forced win, stop immediately
+                    if (bestS >= GOMOKU_SCORES.WIN * 0.9) {
+                        bestMove = bestM;
+                        currentBestScore = bestS;
+                        break;
+                    }
+
+                    if (performance.now() - startTime > timeLimit) {
+                        // Don't update bestMove with partial search results if we timed out mid-iteration?
+                        // Or trust the previous iteration.
+                        // Ideally we only update if we finished the iteration or if the partial result is amazing.
+                        // For simplicity, we just keep the previous completed iteration's best, 
+                        // UNLESS we finished this iteration's loop?
+                        // The loop above breaks if timeout.
+                        // We should probably NOT update bestMove if d > 2 and we timed out early.
+                        break; 
+                    }
+                    
+                    bestMove = bestM;
+                    currentBestScore = bestS;
+                }
+
+                // Add slight randomness for Easy/Medium to vary play?
+                // Or deterministic high quality? User requested "Difficulty".
+                // Keep it deterministic.
+
+                ctx.postMessage({ 
+                    type: 'ai-response', 
+                    data: { 
+                        move: bestMove, 
+                        winRate: 0.5, // We don't have real winrate from heuristics
+                        lead: 0 
+                    } 
+                });
+                return;
+            }
+
+            // === Go Logic (Engine) ===
             if (!engine) {
                 // [Fix] If engine is missing, we cannot analyze.
                 // We should check if we can auto-recover or if we should fail.
@@ -224,30 +361,17 @@ ctx.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             // Select best move
             if (result.moves.length > 0) {
                  const best = result.moves[0];
-                     // If best is pass (-1, -1)
-                 if (best.x === -1) {
-                      ctx.postMessage({ 
-                          type: 'ai-response', 
-                          data: { 
-                              move: null, 
-                              winRate: result.rootInfo.winrate,
-                              lead: result.rootInfo.lead,
-                              scoreStdev: result.rootInfo.scoreStdev,
-                              ownership: result.rootInfo.ownership
-                          } 
-                      });
-                 } else {
-                      ctx.postMessage({ 
-                          type: 'ai-response', 
-                          data: { 
-                              move: { x: best.x, y: best.y }, 
-                              winRate: result.rootInfo.winrate,
-                              lead: result.rootInfo.lead,
-                              scoreStdev: result.rootInfo.scoreStdev,
-                              ownership: result.rootInfo.ownership
-                          } 
-                      });
-                 }
+                 const moveData = best.x === -1 ? null : { x: best.x, y: best.y };
+                 ctx.postMessage({ 
+                      type: 'ai-response', 
+                      data: { 
+                          move: moveData, 
+                          winRate: result.rootInfo.winrate,
+                          lead: result.rootInfo.lead,
+                          scoreStdev: result.rootInfo.scoreStdev,
+                          ownership: result.rootInfo.ownership
+                      } 
+                 });
             } else {
                  // No moves? Pass.
                  ctx.postMessage({ 
@@ -260,6 +384,7 @@ ctx.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                      } 
                  });
             }
+
         } else if (msg.type === 'stop') {
             // No-op for now as ONNX run is atomicish. 
             // We could set a flag if we had a loop.
@@ -274,6 +399,98 @@ ctx.onmessage = async (e: MessageEvent<WorkerMessage>) => {
              engine = null;
         }
         ctx.postMessage({ type: 'error', message: err.message });
+    }
+};
+
+const minimaxGomokuRecursive = (
+    board: BoardState, 
+    depth: number, 
+    alpha: number, 
+    beta: number, 
+    isMaximizing: boolean, 
+    player: Player, 
+    lastMove: Point | null
+): number => {
+    // Check Terminal (Win/Loss)
+    if (lastMove && checkGomokuWin(board, lastMove)) {
+        // If the *current* player just moved and won, that's great for them.
+        // But minimax is called *after* the move.
+        // So this means the PREVIOUS mover won. 
+        // If isMaximizing=true, it means "Turn for Maximizer". 
+        // So the previous mover was Minimizer. Minimizer won.
+        // Return -Infinity
+        return isMaximizing ? -100000000 : 100000000;
+    }
+    
+    if (depth === 0) return 0;
+
+    const size = board.length;
+    // Optimization: Only search neighborhood of existing stones?
+    // standard getCandidateMoves handles it (range=2)
+    const candidates = getCandidateMoves(board, size, 2);
+    if (candidates.length === 0) return 0;
+
+    const myColor = player;
+    const opColor = player === 'black' ? 'white' : 'black';
+    // Current Mover Color
+    const currentColor = isMaximizing ? player : opColor;
+    // const nextColor    = isMaximizing ? opColor : player;
+    
+    // Heuristic Sort (Move Ordering)
+    const scoredMoves = candidates.map(pt => {
+        // Evaluate based on Current Mover's View
+        const score = getGomokuScore(board, pt.x, pt.y, currentColor, isMaximizing ? opColor : player, false);
+        return { pt, score };
+    });
+    
+    scoredMoves.sort((a,b) => b.score - a.score);
+    
+    // Pruning
+    const branching = depth > 2 ? 6 : 10;
+    const movesToSearch = scoredMoves.slice(0, branching);
+
+    if (isMaximizing) {
+        let maxEval = -Infinity;
+        for (const {pt} of movesToSearch) {
+            // Check immediate win (Optimization)
+            if (getGomokuScore(board, pt.x, pt.y, player, opColor, false) >= GOMOKU_SCORES.WIN) {
+                return 100000000;
+            }
+
+            board[pt.y][pt.x] = { color: player, x: pt.x, y: pt.y, id: 'sim' };
+            
+            const evalScore = minimaxGomokuRecursive(board, depth - 1, alpha, beta, false, player, pt);
+            
+            board[pt.y][pt.x] = null; // Backtrack
+            
+            // Soft positional bonus
+            const bonus = pt.x === Math.floor(size/2) && pt.y === Math.floor(size/2) ? 10 : 0;
+            const total = evalScore + bonus * 0.01;
+            
+            maxEval = Math.max(maxEval, total);
+            alpha = Math.max(alpha, total);
+            if (beta <= alpha) break; 
+        }
+        return maxEval;
+    } else {
+        let minEval = Infinity;
+        for (const {pt} of movesToSearch) {
+             // Check immediate win for Opponent (Optimization)
+            if (getGomokuScore(board, pt.x, pt.y, opColor, player, false) >= GOMOKU_SCORES.WIN) {
+                return -100000000;
+            }
+
+            board[pt.y][pt.x] = { color: opColor, x: pt.x, y: pt.y, id: 'sim' };
+            
+            const evalScore = minimaxGomokuRecursive(board, depth - 1, alpha, beta, true, player, pt);
+            
+            board[pt.y][pt.x] = null; // Backtrack
+            
+            minEval = Math.min(minEval, evalScore);
+            beta = Math.min(beta, evalScore);
+            if (beta <= alpha) break;
+        }
+        return minEval;
     }
 };
 

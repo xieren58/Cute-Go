@@ -425,7 +425,8 @@ const isSimpleEye = (board: BoardState, x: number, y: number, color: Player): bo
 };
 
 // 1. 候选点生成器
-const getCandidateMoves = (board: BoardState, size: number, range: number = 2): Point[] => {
+// 1. 候选点生成器 (Exported for Worker)
+export const getCandidateMoves = (board: BoardState, size: number, range: number = 2): Point[] => {
   const candidates = new Set<number>(); // Optimization
   const hasStones = board.some(row => row.some(s => s !== null));
 
@@ -482,7 +483,8 @@ const getCandidateMoves = (board: BoardState, size: number, range: number = 2): 
 };
 
 // 2. 棋形评估
-const evaluateShape = (board: BoardState, x: number, y: number, player: Player): number => {
+// 2. 棋形评估
+export const evaluateShape = (board: BoardState, x: number, y: number, player: Player): number => {
   const size = board.length;
   let score = 0;
   const opponent = player === 'black' ? 'white' : 'black';
@@ -566,7 +568,8 @@ const evaluateShape = (board: BoardState, x: number, y: number, player: Player):
 };
 
 // 3. 影响力/位置评分
-const evaluatePositionStrength = (x: number, y: number, size: number): number => {
+// 3. 影响力/位置评分
+export const evaluatePositionStrength = (x: number, y: number, size: number): number => {
   if (size >= 13) {
     const dX = Math.min(x, size - 1 - x);
     const dY = Math.min(y, size - 1 - y);
@@ -581,7 +584,8 @@ const evaluatePositionStrength = (x: number, y: number, size: number): number =>
 };
 
 // 4. 五子棋评估核心 (Heuristics - Stronger Version)
-const GOMOKU_SCORES = {
+// 4. 五子棋评估核心 (Heuristics - Stronger Version)
+export const GOMOKU_SCORES = {
   WIN: 100000000,
   OPEN_4: 10000000,
   CLOSED_4: 1000000, // Still deadly if not blocked
@@ -592,7 +596,8 @@ const GOMOKU_SCORES = {
 };
 
 // Check for specific patterns in a line (bitmask style or string match logic)
-const evaluateLine = (board: BoardState, x: number, y: number, dx: number, dy: number, player: Player): number => {
+// Check for specific patterns in a line (bitmask style or string match logic)
+export const evaluateLine = (board: BoardState, x: number, y: number, dx: number, dy: number, player: Player): number => {
   const size = board.length;
   // Extract a line of 9 points centered at x,y:  [-4, -3, -2, -1, 0, 1, 2, 3, 4]
   // 0 is the candidate move position (which is currently empty or simulated)
@@ -720,7 +725,8 @@ const evaluateLine = (board: BoardState, x: number, y: number, dx: number, dy: n
 };
 
 // Simplified but Stronger Shape Evaluator
-const getGomokuShapeScore = (board: BoardState, x: number, y: number, player: Player): number => {
+// Simplified but Stronger Shape Evaluator
+export const getGomokuShapeScore = (board: BoardState, x: number, y: number, player: Player): number => {
     const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
     let totalScore = 0;
     const size = board.length;
@@ -747,7 +753,7 @@ const getGomokuShapeScore = (board: BoardState, x: number, y: number, player: Pl
     return totalScore;
 };
 
-const analyzeLineBuffer = (line: number[]): number => {
+export const analyzeLineBuffer = (line: number[]): number => {
     // line length 9. 1=Me, -1=Opp, 0=Empty, 2=Wall
     // We look for patterns of '1'
     
@@ -788,7 +794,7 @@ const analyzeLineBuffer = (line: number[]): number => {
     return 0;
 };
 
-const getGomokuScore = (board: BoardState, x: number, y: number, player: Player, opponent: Player, strict: boolean): number => {
+export const getGomokuScore = (board: BoardState, x: number, y: number, player: Player, opponent: Player, strict: boolean): number => {
     // 1. Offensive Score (What I gain)
     const attackScore = getGomokuShapeScore(board, x, y, player);
     

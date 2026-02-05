@@ -788,7 +788,7 @@ const App: React.FC = () => {
                  if (settings.difficulty === 'Easy' && !isElectronAvailable) {
                       const aiConfigLocal = getAIConfig(settings.difficulty);
                       if (!webAiEngine.isWorkerReady && !webAiEngine.isInitializing) {
-                          const needModel = aiConfigLocal.useModel;
+                          const needModel = aiConfigLocal.useModel && settings.gameType === 'Go';
                           console.log(`[handleStartGame] Initializing Local AI for Cloud-Easy override...`);
                           webAiEngine.initializeAI({ needModel });
                       }
@@ -1650,8 +1650,8 @@ const App: React.FC = () => {
               // [Modification] Allow falling through even if !isWorkerReady, so requestWebAiMove can trigger Lazy Init
           }
           // [Fix] All Go games now use the high-level path (Worker or Electron) for robust Ko handling
-          // Only Gomoku stays in the local main-thread logic.
-          const shouldUseHighLevelAI = settings.gameType === 'Go'; 
+          // Gomoku implementation moved to Worker -> Also High Level.
+          const shouldUseHighLevelAI = true; 
     
           if (shouldUseHighLevelAI) {
               const aiConfig = getAIConfig(settings.difficulty);
@@ -1659,9 +1659,9 @@ const App: React.FC = () => {
                   aiTurnLock.current = true; 
                   
                   const isEasyMode = settings.difficulty === 'Easy';
-                  // [Fix] Redirect "Cloud Easy" to Local AI
-                  // If difficulty is Easy, we skip this block and fall through to Local Web/Electron AI
-                  if (useCloud && !isEasyMode) {
+                  
+                  // Cloud & Electron are GO Only
+                  if (settings.gameType === 'Go' && useCloud && !isEasyMode) {
                       // Cloud Mode - Optimized for Speed
                       // Use aiConfig simulations.
                       // [Fix] Reduce visits to lower difficulty as requested.
@@ -1684,70 +1684,31 @@ const App: React.FC = () => {
                           komi
                       );
                   }
-                  else if (isElectronAvailable) {
+                  else if (settings.gameType === 'Go' && isElectronAvailable) {
                       electronAiEngine.requestAiMove(aiColor, settings.difficulty, settings.maxVisits, getResignThreshold(settings.difficulty));
                   } else {
-                       // Web AI Request
+                       // Web AI Request (Go or Gomoku)
                        let sims = aiConfig.simulations;
                       
-                      // Safety Check for Mobile? (Already handled in aiConfig)
-                      if (sims < 1) sims = 1;
+                       // Safety Check for Mobile? (Already handled in aiConfig)
+                       if (sims < 1) sims = 1;
 
                        // Determine Komi based on board size
-                      const komi = settings.boardSize === 9 ? 6.5 : 7.5;
+                       const komi = settings.boardSize === 9 ? 6.5 : 7.5;
                       
-                      const t = aiConfig.temperature ?? 0;
+                       const t = aiConfig.temperature ?? 0;
 
-                      webAiEngine.requestWebAiMove(
-                          gameState.boardRef.current, 
-                          aiColor, 
-                          gameState.historyRef.current, 
-                          sims, 
-                          komi, 
-                          settings.difficulty,
-                          t // Pass Temperature
-                      );
+                       webAiEngine.requestWebAiMove(
+                           gameState.boardRef.current, 
+                           aiColor, 
+                           gameState.historyRef.current, 
+                           sims, 
+                           komi, 
+                           settings.difficulty,
+                           t, // Pass Temperature
+                           settings.gameType as any // [New] Pass Game Type
+                       );
                   }
-              }
-          }
-          else {
-              // Local AI (Gomoku Only or Failsafe)
-              if (!aiTurnLock.current) {
-                  aiTurnLock.current = true;
-                  setIsThinking(true);
-                  if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
-    
-                  aiTimerRef.current = setTimeout(() => {
-                      try {
-                          const currentRealBoard = gameState.boardRef.current;
-                          // If remote/user moved before AI could, abort
-                          if (gameState.currentPlayerRef.current !== aiColor) {
-                              setIsThinking(false); aiTurnLock.current = false; return;
-                          }
-                          // Pass history logic for AI
-                          let prevHash = null;
-                          const currentHistory = gameState.historyRef.current;
-                          if (currentHistory && currentHistory.length >= 1) {
-                              prevHash = getBoardHash(currentHistory[currentHistory.length - 1].board);
-                          } else {
-                              prevHash = null;
-                          }
-
-                          const move = getAIMove(currentRealBoard, aiColor, settings.gameType, settings.difficulty, prevHash);
-                          setIsThinking(false);
-                          
-                          if (move === 'RESIGN') endGame(settings.userColor, 'AI 认为差距过大，投子认输');
-                          else if (move) executeMove(move.x, move.y, false);
-                          else handlePass(false); // AI Passes
-                      } catch (error: any) {
-                          console.error("AI Error:", error);
-                          setIsThinking(false);
-                          setToastMsg(`AI 出错: ${error?.message || '未知错误'}`);
-                          setTimeout(() => setToastMsg(null), 5000);
-                      } finally {
-                          aiTurnLock.current = false; aiTimerRef.current = null;
-                      }
-                  }, 200); 
               }
           }
         } else {
@@ -2102,6 +2063,7 @@ const App: React.FC = () => {
                            showTerritory={showTerritory}
                            stoneSkin={settings.stoneSkin}
                            boardSkin={settings.boardSkin}
+                           separatePieces={settings.separatePieces}
                         />
                     </div>
                 </div>
@@ -2378,6 +2340,8 @@ const App: React.FC = () => {
                 onOpenTsumego={() => setShowTsumegoLevelSelector(true)}
                 onOpenSkinShop={() => setShowSkinShop(true)}
                 isElectronAvailable={isElectronAvailable}
+                separatePieces={settings.separatePieces}
+                setSeparatePieces={settings.setSeparatePieces}
            />
 
            <SkinShopModal 

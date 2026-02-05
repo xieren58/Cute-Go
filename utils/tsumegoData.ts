@@ -35,7 +35,7 @@ export interface TsumegoLevel {
 
 export const fetchProblemManifest = async (): Promise<TsumegoCategory[]> => {
     try {
-        const res = await fetch('/problems_manifest.json');
+        const res = await fetch('problems_manifest.json');
         if (!res.ok) throw new Error('Failed to load manifest');
         return await res.json();
     } catch (e) {
@@ -46,7 +46,7 @@ export const fetchProblemManifest = async (): Promise<TsumegoCategory[]> => {
 
 export const fetchProblemSGF = async (filename: string): Promise<string> => {
     try {
-        const res = await fetch(`/Problems/${filename}`);
+        const res = await fetch(`Problems/${filename}`);
         if (!res.ok) throw new Error(`Failed to load SGF: ${filename}`);
         
         const buffer = await res.arrayBuffer();

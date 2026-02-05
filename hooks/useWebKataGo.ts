@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { BoardState, Player, BoardSize } from '../types';
+import { BoardState, Player, BoardSize, GameType } from '../types';
 import { logEvent } from '../utils/logger';
 
 interface UseWebKataGoProps {
@@ -24,7 +24,7 @@ export const useWebKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign, onAiEr
     const workerRef = useRef<Worker | null>(null);
     const isWorkerReadyRef = useRef(false); // [New] Synchronous check
     const isThinWorkerRef = useRef(false); // [New] Track if worker is rule-only
-    const pendingRequestRef = useRef<{ board: BoardState; playerColor: Player; history: any[]; simulations: number; komi?: number; difficulty?: string; temperature?: number } | null>(null);
+    const pendingRequestRef = useRef<{ board: BoardState; playerColor: Player; history: any[]; gameType?: GameType; simulations: number; komi?: number; difficulty?: string; temperature?: number } | null>(null);
     const expectingResponseRef = useRef(false);
     const initializingRef = useRef(false); 
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -126,7 +126,7 @@ export const useWebKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign, onAiEr
                         requestWebAiMove(
                             pending.board, pending.playerColor, pending.history, 
                             pending.simulations, pending.komi, 
-                            pending.difficulty as any, pending.temperature
+                            pending.difficulty as any, pending.temperature, pending.gameType
                         );
                     }
                 } else if (msg.type === 'ai-response') {
@@ -210,7 +210,8 @@ export const useWebKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign, onAiEr
         simulations: number = 45,
         komi: number = 7.5, 
         difficulty: 'Easy' | 'Medium' | 'Hard' = 'Hard',
-        temperature: number = 0
+        temperature: number = 0,
+        gameType: GameType = 'Go' // [New]
     ) => {
         const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
@@ -228,7 +229,7 @@ export const useWebKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign, onAiEr
             // If worker exists but is 'released' (memory saved), re-init it.
             if (workerRef.current && !isInitializing) {
                  console.log("[WebAI] Worker exists but suspended. Re-Initializing...");
-                 pendingRequestRef.current = { board, playerColor, history, simulations, komi, difficulty, temperature };
+                 pendingRequestRef.current = { board, playerColor, history, simulations, komi, difficulty, temperature, gameType };
                  // Silent Re-init: Treat as "Thinking" to user, so no popup appears.
                  setInitStatus(""); 
                  setIsThinking(true); 
@@ -240,23 +241,23 @@ export const useWebKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign, onAiEr
             // If not initialized at all, try initializing?
             if (!isInitializing && !workerRef.current) {
                  console.log("[WebAI] Auto-initializing for request...");
-                 pendingRequestRef.current = { board, playerColor, history, simulations, komi, difficulty, temperature };
+                 pendingRequestRef.current = { board, playerColor, history, simulations, komi, difficulty, temperature, gameType };
                  // [Fix] AI mode always needs model for analysis. 
                  // Tsumego hints also need model for search.
-                 const needModel = true; 
+                 const needModel = gameType === 'Go'; 
                  initializeAI({ needModel });
             } else if (isInitializing) {
                  // Just Queue
-                 pendingRequestRef.current = { board, playerColor, history, simulations, komi, difficulty, temperature };
+                 pendingRequestRef.current = { board, playerColor, history, simulations, komi, difficulty, temperature, gameType };
             }
             return;
         }
 
         // [Upgrade] If worker is ready but only in 'Thin' mode and we now need a model
         const needFullModel = true; 
-        if (isWorkerReadyRef.current && needFullModel && isThinWorkerRef.current && !isLoading) {
+        if (isWorkerReadyRef.current && needFullModel && isThinWorkerRef.current && !isLoading && gameType === 'Go') { // Only Go needs model upgrade
              console.log("[WebAI] Upgrading from Thin to Full Mode (Model Required for Difficulty)...");
-             pendingRequestRef.current = { board, playerColor, history, simulations, komi, difficulty, temperature };
+             pendingRequestRef.current = { board, playerColor, history, simulations, komi, difficulty, temperature, gameType };
              setIsWorkerReady(false); 
              isWorkerReadyRef.current = false; // Mark as not ready to trigger full init
              initializeAI({ needModel: true });
@@ -280,7 +281,8 @@ export const useWebKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign, onAiEr
                 simulations,
                 komi,
                 difficulty,
-                temperature
+                temperature,
+                gameType // [New]
             }
         });
         

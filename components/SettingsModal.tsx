@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Cpu, LayoutGrid, BarChart3, Wind, Volume2, VolumeX, Smartphone, RotateCcw, Palette, FileUp, Home } from 'lucide-react';
+import { X, Cpu, LayoutGrid, BarChart3, Wind, Volume2, VolumeX, Smartphone, RotateCcw, Palette, FileUp, Home, CircleDot } from 'lucide-react';
 import { BoardSize, GameType, GameMode, Player, ExtendedDifficulty } from '../types';
 import { getSliderBackground, getCalculatedVisits } from '../utils/helpers';
 import { sliderToVisits, visitsToSlider } from '../hooks/useKataGo';
@@ -36,6 +36,8 @@ interface SettingsModalProps {
     vibrate: (pattern: number | number[]) => void;
     skipStartScreen: boolean;
     setSkipStartScreen: (val: boolean) => void;
+    separatePieces: boolean;
+    setSeparatePieces: (val: boolean) => void;
 
     // Navigation
     onStartSetup: () => void;
@@ -61,6 +63,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     hapticEnabled, setHapticEnabled,
     vibrate,
     skipStartScreen, setSkipStartScreen,
+    separatePieces, setSeparatePieces,
     onStartSetup,
     onOpenImport,
     onOpenOnline,
@@ -284,6 +287,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <button onClick={() => setShowQi(!showQi)} className={`btn-retro flex-1 flex flex-col items-center justify-center gap-1 px-1 py-2 rounded-xl h-16 ${showQi ? 'bg-[#8c6b38] border-[#5c4033] text-[#fcf6ea]' : 'bg-[#fff] border-[#e3c086] text-[#8c6b38]'}`}>
                                 <Wind size={18} />
                                 <span className="text-xs font-bold">气</span>
+                            </button>
+                            <button onClick={() => setSeparatePieces(!separatePieces)} className={`btn-retro flex-1 flex flex-col items-center justify-center gap-1 px-1 py-2 rounded-xl h-16 ${separatePieces ? 'bg-[#8c6b38] border-[#5c4033] text-[#fcf6ea]' : 'bg-[#fff] border-[#e3c086] text-[#8c6b38]'}`}>
+                                <CircleDot size={18} />
+                                <span className="text-xs font-bold">独立</span>
                             </button>
                         </div>
 

@@ -32,6 +32,7 @@ interface GameBoardProps {
   showTerritory?: boolean;
   stoneSkin?: string;
   boardSkin?: string; // New
+  separatePieces?: boolean; // New
 }
 
 
@@ -68,7 +69,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   territory,
   showTerritory,
   stoneSkin = 'classic',
-  boardSkin = 'wood'
+  boardSkin = 'wood',
+  separatePieces = false
 }) => {
   const boardSize = board.length;
   const { CELL_SIZE, GRID_PADDING } = useMemo(() => 
@@ -418,6 +420,37 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     }
 
     const groups = getAllGroups(board);
+
+    if (separatePieces) {
+        return groups.flatMap(group => {
+            let mood: 'happy' | 'neutral' | 'worried' = 'happy';
+            if (group.liberties === 1) mood = 'worried';
+            else if (group.liberties <= 3) mood = 'neutral';
+
+            // Calculate look direction towards liberties (optional, keeps them alive)
+            let lookOffset = { x: 0, y: 0 };
+            if (group.libertyPoints && group.libertyPoints.length > 0) {
+                 let lx = 0, ly = 0;
+                 group.libertyPoints.forEach(p => { lx += p.x; ly += p.y; });
+                 lx /= group.libertyPoints.length;
+                 ly /= group.libertyPoints.length;
+                 const dx = lx - group.stones[0].x; // Approx direction from first stone... 
+                 // actually simpler to just look at center of liberties from each stone? 
+                 // Let's keep it simple for now: distinct stones, standard face.
+            }
+
+            return group.stones.map(stone => ({
+                id: stone.id,
+                x: stone.x,
+                y: stone.y,
+                mood,
+                color: stone.color,
+                scale: 1, // No deformation
+                lookOffset: { x: 0, y: 0 } // Reset look for simplicity in separate mode
+            }));
+        });
+    }
+
     return groups.map(group => {
         let sumX = 0;
         let sumY = 0;
@@ -724,11 +757,18 @@ export const GameBoard: React.FC<GameBoardProps> = ({
             const orthoWidth = isGomoku ? CELL_SIZE * 0.2 : CELL_SIZE * 0.9;
             
             // Unified filter for standard themes
-            // [Fix] Allow jelly filter for Gomoku too (User Request)
-            const filterId = (!isMinimal) 
-                ? (theme.filter ? undefined : (color === 'black' ? 'url(#jelly-black)' : 'url(#jelly-white)'))
-                : undefined;
+            // [Perf] Use tighter filters for Separate/Gomoku to allow Group-Rendering without fusion
+            const useSeparateFilter = isGomoku || separatePieces;
             
+            let filterId = undefined;
+            if (!isMinimal && !theme.filter) {
+                if (color === 'black') {
+                    filterId = useSeparateFilter ? 'url(#jelly-separate-black)' : 'url(#jelly-black)';
+                } else {
+                    filterId = useSeparateFilter ? 'url(#jelly-separate-white)' : 'url(#jelly-white)';
+                }
+            }
+
             const styleFilter = theme.filter ? { filter: theme.filter } : undefined;
             const borderColor = color === 'black' ? theme.blackBorder : theme.whiteBorder;
             const strokeW = isGomoku ? 1 : 0;
@@ -739,35 +779,32 @@ export const GameBoard: React.FC<GameBoardProps> = ({
             const effectiveStrokeWidth = (isMinimal && isMainLayer) ? 0 : (isMainLayer ? strokeW : 0);
 
             // [Refine] Detect 2x2 quads to fill the center hole
-            // This ensures 2x2 blocks look like a solid chunk without a tiny hole in the middle
-            // Only necessary for Minimal theme (Compatibility mode) where we do fusion
+            // ... (fillers logic) ...
             const fillers = [];
-            if (isMinimal && !isGomoku) {
+            if (isMinimal && !isGomoku && !separatePieces) {
                  const myStones = new Set(stones.filter(s => s.color === color).map(s => `${s.x},${s.y}`));
-                 // Naive scan is fast enough for 19x19
                  for (let x = 0; x < boardSize - 1; x++) {
                      for (let y = 0; y < boardSize - 1; y++) {
-                         if (
-                             myStones.has(`${x},${y}`) &&
-                             myStones.has(`${x+1},${y}`) &&
-                             myStones.has(`${x},${y+1}`) &&
-                             myStones.has(`${x+1},${y+1}`)
-                         ) {
+                         if (myStones.has(`${x},${y}`) && myStones.has(`${x+1},${y}`) && 
+                             myStones.has(`${x},${y+1}`) && myStones.has(`${x+1},${y+1}`)) {
                              fillers.push({ x, y });
                          }
                      }
                  }
             }
 
-            // [Fix] For Gomoku, apply filter to individual stones to prevent fusion. 
-            // For Go, apply to group to enable fusion.
-            const groupFilter = isGomoku ? undefined : filterId;
-            const stoneFilter = isGomoku ? filterId : undefined;
+            // [Perf] ALWAYS apply filter to GROUP to maximize performance
+            // The "separate" filters have tight blur so stones won't fuse
+            const groupFilter = filterId;
+            const stoneFilter = undefined; 
+            
+            // [Visual] Slightly reduce radius in separate mode to further ensure separation
+            const radius = (separatePieces || isGomoku) ? STONE_RADIUS * 0.95 : STONE_RADIUS;
 
             return (
                 <g filter={groupFilter} style={styleFilter} opacity={opacity}>
                      {/* 1. Direct Connections (Fused Body) */}
-                     {!isGomoku && (
+                     {!isGomoku && !separatePieces && (
                         <g>
                             {connections.filter(c => c.color === color && c.type === 'ortho').map((c, i) => (
                                 <line 
@@ -802,7 +839,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                             key={`${color}-stone-${s.id}-${drawColor}`}
                             cx={GRID_PADDING + s.x * CELL_SIZE}
                             cy={GRID_PADDING + s.y * CELL_SIZE}
-                            r={STONE_RADIUS}
+                            r={radius}
                             fill={drawColor}
                             // Only draw stroke on the MAIN layer
                             stroke={effectiveStroke}
@@ -1011,6 +1048,33 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                     <feGaussianBlur in="SourceGraphic" stdDeviation={CELL_SIZE * 0.1} result="blur" />
                     <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 19 -9" result="blob" />
                     <feGaussianBlur in="blob" stdDeviation="2" result="blurBlob"/>
+                    <feSpecularLighting in="blurBlob" surfaceScale="5" specularConstant="1.2" specularExponent="15" lightingColor="#ffffff" result="specular">
+                        <fePointLight x="-500" y="-500" z="300" />
+                    </feSpecularLighting>
+                    <feComposite in="specular" in2="blob" operator="in" result="specularInBlob"/>
+                    <feDropShadow dx="0" dy={CELL_SIZE * 0.1} stdDeviation={CELL_SIZE * 0.05} floodColor="#5c4033" floodOpacity="0.3" in="blob" result="shadow" />
+                    <feComposite in="shadow" in2="blob" operator="over" result="shadowedBlob"/>
+                    <feComposite in="specularInBlob" in2="shadowedBlob" operator="over" />
+                </filter>
+
+                {/* [Optimized] Tighter Jelly filters for Separate/Gomoku mode */}
+                <filter id="jelly-separate-black" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur in="SourceGraphic" stdDeviation={CELL_SIZE * 0.04} result="blur" /> 
+                    <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 19 -9" result="blob" />
+                    <feGaussianBlur in="blob" stdDeviation="1.5" result="blurBlob"/>
+                    <feSpecularLighting in="blurBlob" surfaceScale="5" specularConstant="0.8" specularExponent="20" lightingColor="#ffffff" result="specular">
+                        <fePointLight x="-500" y="-500" z="300" />
+                    </feSpecularLighting>
+                    <feComposite in="specular" in2="blob" operator="in" result="specularInBlob"/>
+                    <feDropShadow dx="0" dy={CELL_SIZE * 0.1} stdDeviation={CELL_SIZE * 0.05} floodColor="#000000" floodOpacity="0.5" in="blob" result="shadow" />
+                    <feComposite in="shadow" in2="blob" operator="over" result="shadowedBlob"/>
+                    <feComposite in="specularInBlob" in2="shadowedBlob" operator="over" />
+                </filter>
+
+                <filter id="jelly-separate-white" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur in="SourceGraphic" stdDeviation={CELL_SIZE * 0.04} result="blur" />
+                    <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 19 -9" result="blob" />
+                    <feGaussianBlur in="blob" stdDeviation="1.5" result="blurBlob"/>
                     <feSpecularLighting in="blurBlob" surfaceScale="5" specularConstant="1.2" specularExponent="15" lightingColor="#ffffff" result="specular">
                         <fePointLight x="-500" y="-500" z="300" />
                     </feSpecularLighting>
