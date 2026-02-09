@@ -1,5 +1,5 @@
 export type BoardThemeId = 'wood' | 'realistic_wood';
-export type StoneThemeId = 'classic' | 'minimal';
+export type StoneThemeId = 'classic' | 'minimal' | 'skeuomorphic';
 
 export interface BoardTheme {
   id: BoardThemeId;
@@ -21,6 +21,9 @@ export interface StoneTheme {
   blackBorder: string;
   whiteBorder: string;
   filter?: string; // Optional CSS filter for texture
+  // [New] High-performance rendering hints
+  useGradientFill?: boolean; // Use SVG gradient fills instead of filters
+  useShadowLayers?: boolean; // Use manual shadow layers for 3D effect
 }
 
 export const BOARD_THEMES: Record<BoardThemeId, BoardTheme> = {
@@ -65,5 +68,16 @@ export const STONE_THEMES: Record<StoneThemeId, StoneTheme> = {
     blackBorder: '#000000',
     whiteBorder: '#dcdcdc',
     filter: 'none'
+  },
+  skeuomorphic: {
+    id: 'skeuomorphic',
+    name: '新拟物风格',
+    blackColor: '#303030',  // Flat matte black
+    whiteColor: '#e8e8e4',  // Flat matte cream
+    blackBorder: '#000000',
+    whiteBorder: '#d0d0d0',
+    filter: 'none', // No SVG filters - uses multi-layer shadows for neumorphism
+    useGradientFill: false, // Now uses solid colors
+    useShadowLayers: true   // Uses light+dark shadow layers for extruded effect
   }
 };

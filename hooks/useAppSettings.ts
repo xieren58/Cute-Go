@@ -15,7 +15,7 @@ export const useAppSettings = () => {
   const [boardSize, setBoardSize] = useState<BoardSize>(() => loadState('boardSize', 9));
   const [gameType, setGameType] = useState<GameType>(() => loadState('gameType', 'Go'));
   const [gameMode, setGameMode] = useState<GameMode>(() => loadState('gameMode', 'PvAI'));
-  const [difficulty, setDifficulty] = useState<ExtendedDifficulty>(() => loadState('difficulty', 'Hard'));
+  const [difficulty, setDifficulty] = useState<ExtendedDifficulty>(() => loadState('difficulty', 'Easy'));
   
   // 思考量状态 (默认 1)
   const [maxVisits, setMaxVisits] = useState<number>(() => loadState('maxVisits', 100));
@@ -32,7 +32,7 @@ export const useAppSettings = () => {
 
   // Skins
   const [boardSkin, setBoardSkin] = useState<string>(() => loadState('boardSkin', 'wood'));
-  const [stoneSkin, setStoneSkin] = useState<string>(() => loadState('stoneSkin', 'classic'));
+  const [stoneSkin, setStoneSkin] = useState<string>(() => loadState('stoneSkin', 'skeuomorphic'));
 
   // Start Screen Preference
   const [skipStartScreen, setSkipStartScreen] = useState<boolean>(() => loadState('skipStartScreen', true));

@@ -1,5 +1,5 @@
 import React from 'react';
-import { RotateCcw, SkipForward, Play, Eraser, Undo2, Lightbulb } from 'lucide-react';
+import { RotateCcw, SkipForward, Play, Eraser, Undo2, Lightbulb, Map, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, LogOut } from 'lucide-react';
 import { AppMode, HistoryItem, Player } from '../types';
 import { getSliderBackground } from '../utils/helpers';
 
@@ -22,6 +22,11 @@ interface GameControlsProps {
     currentPlayer: Player;
     myColor: Player | null;
     consecutivePasses: number;
+    showTerritory?: boolean;
+    onToggleTerritory?: () => void;
+    playClick?: () => void;
+    gameMode?: string;
+    gameType?: string;
     // Tsumego
     isTsumego?: boolean;
     hasPrevProblem?: boolean;
@@ -50,6 +55,11 @@ export const GameControls: React.FC<GameControlsProps> = ({
     currentPlayer,
     myColor,
     consecutivePasses,
+    showTerritory,
+    onToggleTerritory,
+    playClick,
+    gameMode,
+    gameType,
     // Tsumego Props
     isTsumego,
     hasPrevProblem,
@@ -84,21 +94,68 @@ export const GameControls: React.FC<GameControlsProps> = ({
 
             {/* REVIEW MODE CONTROLS */}
             {appMode === 'review' && (
-                <div className="flex flex-col gap-3 mb-2 bg-[#fcf6ea] p-4 rounded-2xl border-2 border-[#e3c086] shadow-sm">
-                     <div className="flex justify-between items-center text-xs font-bold text-[#8c6b38]">
-                        <span>第 {reviewIndex} 手</span>
-                        <span>共 {history.length} 手</span>
+                <div className="flex flex-col gap-3 mb-2 bg-[#fcf6ea] p-4 rounded-3xl border-4 border-[#e3c086] shadow-xl relative overflow-hidden">
+                     {/* Header / Slider */}
+                     <div className="flex flex-col gap-1">
+                         <div className="flex justify-between items-end text-[#8c6b38] px-1">
+                            <span className="text-xs font-bold opacity-80">当前手数</span>
+                            <span className="font-black text-xl font-mono text-[#5c4033] tracking-wider">
+                                {reviewIndex} <span className="text-sm opacity-50 text-[#8c6b38] font-bold">/ {Math.max(0, history.length - 1)}</span>
+                            </span>
+                         </div>
+                         <input 
+                            type="range" min="0" max={history.length > 0 ? history.length - 1 : 0} 
+                            value={reviewIndex} onChange={(e) => setReviewIndex(parseInt(e.target.value))}
+                            className="cute-range w-full h-3 bg-[#e3c086]/30 rounded-full appearance-none cursor-pointer"
+                            style={{ background: getSliderBackground(reviewIndex, 0, history.length > 0 ? history.length - 1 : 1) }}
+                         />
                      </div>
-                     <input 
-                        type="range" min="0" max={history.length > 0 ? history.length - 1 : 0} 
-                        value={reviewIndex} onChange={(e) => setReviewIndex(parseInt(e.target.value))}
-                        className="cute-range"
-                        style={{ background: getSliderBackground(reviewIndex, 0, history.length > 0 ? history.length - 1 : 1) }}
-                     />
-                     <div className="flex gap-2">
-                        <button onClick={() => setReviewIndex(Math.max(0, reviewIndex - 1))} className="btn-retro btn-beige flex-1 py-2 rounded-xl font-bold">上一步</button>
-                        <button onClick={() => setReviewIndex(Math.min(history.length - 1, reviewIndex + 1))} className="btn-retro btn-beige flex-1 py-2 rounded-xl font-bold">下一步</button>
-                        <button onClick={() => { setAppMode('playing'); setGameOver(true); }} className="btn-retro px-4 bg-[#e3c086] text-[#5c4033] border-[#c4ae88] rounded-xl py-2 font-bold">退出</button>
+
+                     {/* Main Control Row */}
+                     <div className="flex items-center gap-2 mt-2">
+                        <button 
+                            onClick={() => setReviewIndex(Math.max(0, reviewIndex - 1))} 
+                            disabled={reviewIndex === 0}
+                            className="btn-retro btn-sand w-12 h-12 rounded-xl flex items-center justify-center disabled:opacity-50 transition-all active:scale-95 border-b-4 active:border-b-0 active:translate-y-1 shrink-0"
+                        >
+                            <ChevronLeft size={24} />
+                        </button>
+                        
+                        <button 
+                            onClick={() => setReviewIndex(Math.min(history.length - 1, reviewIndex + 1))} 
+                            disabled={reviewIndex >= history.length - 1}
+                            className="btn-retro btn-sand w-12 h-12 rounded-xl flex items-center justify-center disabled:opacity-50 transition-all active:scale-95 border-b-4 active:border-b-0 active:translate-y-1 shrink-0"
+                        >
+                            <ChevronRight size={24} />
+                        </button>
+
+                         <button 
+                            onClick={() => {
+                                const isAtEnd = reviewIndex === history.length - 1;
+                                if (!isAtEnd) {
+                                    setReviewIndex(history.length - 1);
+                                    if (!showTerritory) onToggleTerritory?.();
+                                } else {
+                                    onToggleTerritory?.();
+                                }
+                            }}
+                            className={`btn-retro h-12 px-4 rounded-xl font-bold flex flex-1 items-center justify-center gap-2 border-b-4 active:border-b-0 active:translate-y-1 transition-all ${
+                                (showTerritory && reviewIndex === history.length - 1)
+                                ? 'bg-[#5c4033] text-[#f7e7ce] border-[#3e2b22]' 
+                                : 'bg-[#fff] text-[#8c6b38] border-[#e3c086] hover:bg-[#fff9e6]'
+                            }`}
+                        >
+                            <Map size={18} />
+                            <span>{(showTerritory && reviewIndex === history.length - 1) ? '隐藏' : '结果'}</span>
+                        </button>
+
+                         <button 
+                            onClick={() => { setAppMode('playing'); setGameOver(true); }} 
+                            className="btn-retro h-12 w-12 rounded-xl font-bold flex items-center justify-center border-[#c4ae88] bg-[#e3c086] text-[#5c4033] border-b-4 active:border-b-0 active:translate-y-1 hover:bg-[#d4b075] shrink-0"
+                            title="退出"
+                        >
+                            <LogOut size={20} />
+                        </button>
                      </div>
                 </div>
             )}

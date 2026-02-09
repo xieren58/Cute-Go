@@ -1227,7 +1227,8 @@ const App: React.FC = () => {
 
     // Territory (Ownership)
     const displayTerritory = useMemo(() => {
-        if (settings.gameMode !== 'PvAI') return null;
+        // [Optimized] Only calculate if enabled and in valid mode
+        if (settings.gameType !== 'Go' && (gameState.appMode !== 'review' || settings.gameType !== 'Go')) return null;
         const aiColor = settings.userColor === 'black' ? 'white' : 'black';
         
         if (useCloud && cloudTerritory) {
@@ -1243,7 +1244,7 @@ const App: React.FC = () => {
             return webTerritory;
         }
         return null;
-    }, [settings.gameMode, settings.userColor, useCloud, cloudTerritory, isElectronAvailable, webTerritory]);
+    }, [settings.gameMode, settings.userColor, useCloud, cloudTerritory, isElectronAvailable, webTerritory, gameState.appMode]);
 
     // --- Tsumego End Check ---
     useEffect(() => {

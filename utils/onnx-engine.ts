@@ -578,14 +578,13 @@ export class OnnxEngine {
             });
 
             // 3. Sample
-            let r = Math.random() * sumExp;
-            for (const m of weightedMoves) {
-                r -= m.weight;
-                if (r <= 0) {
-                    return [m];
-                }
-            }
-            return weightedMoves.length > 0 ? [weightedMoves[weightedMoves.length - 1]] : []; // Fallback
+            // 3. Sample
+            // [Refactor] Instead of returning one move, we return ALL weighted moves so the caller (worker) 
+            // can iterate through them and validte legality (suicide, superko) which the engine might miss.
+            // We sort them by weight (descending) solely for debug/logging clarity, 
+            // but the caller should sample using weights.
+            weightedMoves.sort((a,b) => b.weight - a.weight);
+            return weightedMoves;
         }
 
         return moves;

@@ -406,6 +406,13 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     return flat;
   }, [board]);
 
+  // [Refactor] Memoize groups for both Faces and Rendering logic
+  const groups = useMemo(() => {
+    // Only compute groups for Go/Standard modes
+    if (gameType === 'Gomoku') return [];
+    return getAllGroups(board);
+  }, [board, gameType]);
+
   const groupFaces = useMemo(() => {
     if (gameType === 'Gomoku') {
         return stones.map(stone => ({
@@ -419,7 +426,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
         }));
     }
 
-    const groups = getAllGroups(board);
+    // const groups = getAllGroups(board); // Replaced by memo above
 
     if (separatePieces) {
         return groups.flatMap(group => {
@@ -743,72 +750,124 @@ export const GameBoard: React.FC<GameBoardProps> = ({
       );
   };
 
-    const renderStoneBody = (color: Player) => {
-        const theme = STONE_THEMES[stoneSkin as StoneThemeId] || STONE_THEMES['classic'];
-        const isMinimal = theme.id === 'minimal';
-        const isGomoku = gameType === 'Gomoku';
+  const renderStoneBody = (color: Player) => {
+    const theme = STONE_THEMES[stoneSkin as StoneThemeId] || STONE_THEMES['classic'];
+    const isMinimal = theme.id === 'minimal';
+    const isSkeuomorphic = theme.id === 'skeuomorphic' || theme.useGradientFill;
+    const isGomoku = gameType === 'Gomoku';
+    // [Refactor] "Separate" rendering path applied for Gomoku OR explicit separate setting
+    // In this mode, we render stones individually with their own filters
+    const useSeparateRendering = isGomoku || separatePieces;
 
-        // Helper to render the actual shapes (Lines + Circles + Fillers)
-        // We pass color/width override to allow drawing "Shadow/Highlight" layers
-        // [Refactor] Add opacity support for layered rendering
-        const renderShapes = (drawColor: string, isMainLayer: boolean, opacity: number = 1.0) => {
-            // [Fix] Ortho connection width should match stone diameter (2 * 0.45 = 0.9)
-            // previously 0.95 caused "bulge", and mismatch caused gaps with borders.
-            const orthoWidth = isGomoku ? CELL_SIZE * 0.2 : CELL_SIZE * 0.9;
-            
-            // Unified filter for standard themes
-            // [Perf] Use tighter filters for Separate/Gomoku to allow Group-Rendering without fusion
-            const useSeparateFilter = isGomoku || separatePieces;
-            
-            let filterId = undefined;
-            if (!isMinimal && !theme.filter) {
-                if (color === 'black') {
-                    filterId = useSeparateFilter ? 'url(#jelly-separate-black)' : 'url(#jelly-black)';
-                } else {
-                    filterId = useSeparateFilter ? 'url(#jelly-separate-white)' : 'url(#jelly-white)';
-                }
+    // Helper to render the actual shapes (Lines + Circles + Fillers)
+    // We pass color/width override to allow drawing "Shadow/Highlight" layers
+    const renderShapes = (drawColor: string, isMainLayer: boolean, opacity: number = 1.0) => {
+        // [Fix] Ortho connection width should match stone diameter (2 * 0.45 = 0.9)
+        const orthoWidth = isGomoku ? CELL_SIZE * 0.2 : CELL_SIZE * 0.9;
+        
+        // Define Filter ID (only for classic theme)
+        let filterId = undefined;
+        if (!isMinimal && !isSkeuomorphic && !theme.filter) {
+            if (color === 'black') {
+                filterId = useSeparateRendering ? 'url(#jelly-separate-black)' : 'url(#jelly-black)';
+            } else {
+                filterId = useSeparateRendering ? 'url(#jelly-separate-white)' : 'url(#jelly-white)';
             }
+        }
 
-            const styleFilter = theme.filter ? { filter: theme.filter } : undefined;
-            const borderColor = color === 'black' ? theme.blackBorder : theme.whiteBorder;
-            const strokeW = isGomoku ? 1 : 0;
+        const styleFilter = theme.filter ? { filter: theme.filter } : undefined;
+        const borderColor = color === 'black' ? theme.blackBorder : theme.whiteBorder;
+        const strokeW = isGomoku ? 1 : 0;
 
-            // [Fix] For minimal theme, main body should NOT have a stroke to allow fusion
-            // The edge definition comes from the shadow/highlight layers
-            const effectiveStroke = (isMinimal && isMainLayer) ? 'none' : (isMainLayer ? borderColor : 'none');
-            const effectiveStrokeWidth = (isMinimal && isMainLayer) ? 0 : (isMainLayer ? strokeW : 0);
+        // [Fix] For minimal theme, main body should NOT have a stroke to allow fusion
+        const effectiveStroke = (isMinimal && isMainLayer) ? 'none' : (isMainLayer ? borderColor : 'none');
+        const effectiveStrokeWidth = (isMinimal && isMainLayer) ? 0 : (isMainLayer ? strokeW : 0);
+        
+        // [Visual] Slightly reduce radius in separate mode to further ensure separation
+        const radius = useSeparateRendering ? STONE_RADIUS * 0.95 : STONE_RADIUS;
 
-            // [Refine] Detect 2x2 quads to fill the center hole
-            // ... (fillers logic) ...
-            const fillers = [];
-            if (isMinimal && !isGomoku && !separatePieces) {
-                 const myStones = new Set(stones.filter(s => s.color === color).map(s => `${s.x},${s.y}`));
-                 for (let x = 0; x < boardSize - 1; x++) {
-                     for (let y = 0; y < boardSize - 1; y++) {
-                         if (myStones.has(`${x},${y}`) && myStones.has(`${x+1},${y}`) && 
-                             myStones.has(`${x},${y+1}`) && myStones.has(`${x+1},${y+1}`)) {
-                             fillers.push({ x, y });
-                         }
-                     }
-                 }
-            }
+        // NOTE: Skeuomorphic theme now uses the same path as Minimal (multi-layer shadow)
+        // but is handled in the if/else block at the end of renderStoneBody, NOT here.
+        // This ensures it goes through PATH B (Connected Groups) for stone fusion effect.
 
-            // [Perf] ALWAYS apply filter to GROUP to maximize performance
-            // The "separate" filters have tight blur so stones won't fuse
-            const groupFilter = filterId;
-            const stoneFilter = undefined; 
+        // --- PATH B: Separate Rendering (Gomoku / Separate Mode - Classic) ---
+        if (useSeparateRendering) {
+            const myStones = stones.filter(s => s.color === color);
+            // [Optimization] Use Radial Gradients + Simple Shadow instead of Filters
+            // This is effectively instant to render (Vector vs Raster Filter)
+            const isBlack = color === 'black';
+            const fillUrl = isBlack ? 'url(#grad-separate-black)' : 'url(#grad-separate-white)';
+            const shadowColor = isBlack ? 'rgba(0,0,0,0.5)' : 'rgba(92,64,51,0.3)';
             
-            // [Visual] Slightly reduce radius in separate mode to further ensure separation
-            const radius = (separatePieces || isGomoku) ? STONE_RADIUS * 0.95 : STONE_RADIUS;
+            // Note: SVG 2.0 supports `drop-shadow` CSS filter which is hardware accelerated
+            const simpleShadow = `drop-shadow(1px 2px 2px ${shadowColor})`; 
 
             return (
-                <g filter={groupFilter} style={styleFilter} opacity={opacity}>
-                     {/* 1. Direct Connections (Fused Body) */}
-                     {!isGomoku && !separatePieces && (
-                        <g>
-                            {connections.filter(c => c.color === color && c.type === 'ortho').map((c, i) => (
+                <g style={{ filter: simpleShadow }} opacity={opacity}>
+                        {myStones.map(s => (
+                            <circle
+                                key={`${color}-stone-${s.id}-${drawColor}`}
+                                cx={GRID_PADDING + s.x * CELL_SIZE}
+                                cy={GRID_PADDING + s.y * CELL_SIZE}
+                                r={radius}
+                                fill={fillUrl}
+                                // Stroke is usually not needed for gradient stones unless high contrast needed
+                                stroke={effectiveStroke}
+                                strokeWidth={effectiveStrokeWidth}
+                                // [Perf] Animate only the new stone
+                                className={animatingStoneId === s.id ? 'stone-enter' : undefined}
+                            />
+                        ))}
+                </g>
+            );
+        }
+
+        // --- PATH B: Connected Groups Rendering (Standard Go) ---
+        // Iterate through groups to keep filter region small (avoids Mobile Texture Limit issues)
+        const myGroups = groups.filter(g => g.stones.length > 0 && g.stones[0].color === color);
+        
+        return (
+            <g opacity={opacity} style={styleFilter}>
+                 {myGroups.map(group => {
+                     const groupStones = group.stones;
+                     // [Optimization] Use Set for O(1) adjacency checks
+                     const stoneSet = new Set(groupStones.map(s => `${s.x},${s.y}`));
+                     
+                     // Generate Local Connections & Fillers
+                     // We check Right and Bottom neighbors to avoid duplicates
+                     const groupConnections = [];
+                     const groupFillers = [];
+
+                     groupStones.forEach(s => {
+                         // Horizontal Connection
+                         if (stoneSet.has(`${s.x+1},${s.y}`)) {
+                             groupConnections.push({
+                                 x1: s.x, y1: s.y, x2: s.x+1, y2: s.y,
+                                 key: `${s.x},${s.y}-h`
+                             });
+                         }
+                         // Vertical Connection
+                         if (stoneSet.has(`${s.x},${s.y+1}`)) {
+                             groupConnections.push({
+                                 x1: s.x, y1: s.y, x2: s.x, y2: s.y+1,
+                                 key: `${s.x},${s.y}-v`
+                             });
+                         }
+                         // Filler (2x2 check): s is top-left
+                         // Need (x+1, y), (x, y+1), (x+1, y+1)
+                         if (!isMinimal && stoneSet.has(`${s.x+1},${s.y}`) && 
+                             stoneSet.has(`${s.x},${s.y+1}`) && 
+                             stoneSet.has(`${s.x+1},${s.y+1}`)) {
+                             groupFillers.push({ x: s.x, y: s.y });     
+                         }
+                     });
+
+                     return (
+                        <g key={`group-${groupStones[0].id}`} filter={filterId}>
+                            {/* 1. Connections */}
+                            {groupConnections.map(c => (
                                 <line 
-                                    key={`${color}-ortho-${i}-${drawColor}`}
+                                    key={`conn-${c.key}-${drawColor}`}
                                     x1={GRID_PADDING + c.x1 * CELL_SIZE}
                                     y1={GRID_PADDING + c.y1 * CELL_SIZE}
                                     x2={GRID_PADDING + c.x2 * CELL_SIZE}
@@ -818,86 +877,90 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                                     strokeLinecap="round"
                                 />
                             ))}
+
+                            {/* 2. Fillers */}
+                            {groupFillers.map((f, i) => (
+                                 <rect
+                                    key={`fill-${i}-${drawColor}`}
+                                    x={GRID_PADDING + (f.x + 0.5) * CELL_SIZE - CELL_SIZE * 0.15}
+                                    y={GRID_PADDING + (f.y + 0.5) * CELL_SIZE - CELL_SIZE * 0.15}
+                                    width={CELL_SIZE * 0.3}
+                                    height={CELL_SIZE * 0.3}
+                                    fill={drawColor}
+                                 />
+                            ))}
+
+                            {/* 3. Stones */}
+                            {groupStones.map(s => (
+                                <circle
+                                    key={`st-${s.id}-${drawColor}`}
+                                    cx={GRID_PADDING + s.x * CELL_SIZE}
+                                    cy={GRID_PADDING + s.y * CELL_SIZE}
+                                    r={radius}
+                                    fill={drawColor}
+                                    stroke={effectiveStroke}
+                                    strokeWidth={effectiveStrokeWidth}
+                                    className={animatingStoneId === s.id ? 'stone-enter' : undefined}
+                                />
+                            ))}
                         </g>
-                    )}
-
-                    {/* 2. Filler Quads (Close the gap in 2x2 blocks) */}
-                    {fillers.map((f, i) => (
-                         <rect
-                            key={`${color}-filler-${i}-${drawColor}`}
-                            x={GRID_PADDING + (f.x + 0.5) * CELL_SIZE - CELL_SIZE * 0.15}
-                            y={GRID_PADDING + (f.y + 0.5) * CELL_SIZE - CELL_SIZE * 0.15}
-                            width={CELL_SIZE * 0.3}
-                            height={CELL_SIZE * 0.3}
-                            fill={drawColor}
-                         />
-                    ))}
-
-                    {/* 3. Stone Bodies */}
-                    {stones.filter(s => s.color === color).map(s => (
-                        <circle
-                            key={`${color}-stone-${s.id}-${drawColor}`}
-                            cx={GRID_PADDING + s.x * CELL_SIZE}
-                            cy={GRID_PADDING + s.y * CELL_SIZE}
-                            r={radius}
-                            fill={drawColor}
-                            // Only draw stroke on the MAIN layer
-                            stroke={effectiveStroke}
-                            strokeWidth={effectiveStrokeWidth} 
-                            // [Fix] Apply filter here if Gomoku
-                            filter={stoneFilter}
-                            // [Perf] Only animate the newly placed stone
-                            className={animatingStoneId === s.id ? 'stone-enter' : undefined}
-                        />
-                    ))}
-                </g>
-            );
-        };
-
-        if (isMinimal) {
-            // [Fix] Refined Skeuomorphic Bevel for Compatibility Mode
-            // 4 Layers for "Ceramic/Jade" feel without SVG filters
-            // Using small, fixed offsets creates a tighter, more precise 3D look
-            const mainColor = color === 'black' ? theme.blackColor : theme.whiteColor;
-            
-            // Tone-on-Tone Shadow/Highlight colors
-            // Black: Dark Grey highlight, Pure Black shadow
-            // White: Pure White highlight, Grey shadow
-            const highlightColor = color === 'black' ? '#505050' : '#ffffff'; 
-            const bodyShadowColor = color === 'black' ? '#000000' : '#999999';
-            const dropShadowColor = '#000000'; 
-            
-            // Sub-pixel offsets for "Exquisite" look
-            const off1 = 1.0; // Rim Highlight (Sharp)
-            const off2 = 0.8; // Body Shadow (Soft)
-            const off3 = 1.5; // Drop Shadow (Depth)
-
-            return (
-                <g>
-                    {/* Layer 1: Drop Shadow (Soft depth on board) */}
-                    <g transform={`translate(${off3}, ${off3})`}>
-                        {renderShapes(dropShadowColor, false, 0.2)}
-                    </g>
-                    
-                    {/* Layer 2: Body Shadow (Volume on bottom-right) */}
-                    <g transform={`translate(${off2}, ${off2})`}>
-                        {renderShapes(bodyShadowColor, false, 0.5)} 
-                    </g>
-
-                    {/* Layer 3: Main Body (Center) */}
-                     <g>
-                        {renderShapes(mainColor, true)}
-                    </g>
-
-
-                </g>
-            );
-        } else {
-            // Standard Rendering
-            const baseColor = color === 'black' ? theme.blackColor : theme.whiteColor;
-            return renderShapes(baseColor, true);
-        }
+                     );
+                 })}
+            </g>
+        );
     };
+
+    if (isMinimal) {
+        // Compatibility Mode / Minimal Theme (Skeuomorphic layers)
+        const mainColor = color === 'black' ? theme.blackColor : theme.whiteColor;
+        const bodyShadowColor = color === 'black' ? '#000000' : '#999999';
+        const dropShadowColor = '#000000'; 
+        
+        const off2 = 0.8; // Body Shadow offset
+        const off3 = 1.5; // Drop Shadow offset
+
+        return (
+            <g>
+                {/* Layer 1: Drop Shadow */}
+                <g transform={`translate(${off3}, ${off3})`}>
+                    {renderShapes(dropShadowColor, false, 0.2)}
+                </g>
+                {/* Layer 2: Body Shadow */}
+                <g transform={`translate(${off2}, ${off2})`}>
+                    {renderShapes(bodyShadowColor, false, 0.5)} 
+                </g>
+                {/* Layer 3: Main Body */}
+                 <g>
+                    {renderShapes(mainColor, true)}
+                </g>
+            </g>
+        );
+    } else if (isSkeuomorphic) {
+        // === PREMIUM BUTTON STYLE (精致纽扣) ===
+        // 使用 CSS drop-shadow 应用到整个组，避免单个棋子阴影叠加
+        
+        const isBlack = color === 'black';
+        
+        // Main body color with subtle tint
+        const mainColor = isBlack ? '#2d2d30' : '#f5f5f2';
+        
+        // CSS drop-shadow applies to ENTIRE GROUP as one shape - no overlap!
+        const shadowStyle = isBlack 
+            ? { filter: 'drop-shadow(1.5px 1.5px 1px rgba(0,0,0,0.4)) drop-shadow(2.5px 2.5px 2px rgba(0,0,0,0.2))' }
+            : { filter: 'drop-shadow(1.5px 1.5px 1px rgba(80,60,40,0.25)) drop-shadow(2.5px 2.5px 2px rgba(50,30,10,0.12))' };
+
+        return (
+            <g style={shadowStyle}>
+                {/* Main Body - shadow is applied to entire group above */}
+                {renderShapes(mainColor, true)}
+            </g>
+        );
+    } else {
+        // Standard Rendering (Classic with filters)
+        const baseColor = color === 'black' ? theme.blackColor : theme.whiteColor;
+        return renderShapes(baseColor, true);
+    }
+  };
 
     const renderLooseSilk = (color: Player) => {
         const theme = STONE_THEMES[stoneSkin as StoneThemeId] || STONE_THEMES['classic'];
@@ -1083,6 +1146,18 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                     <feComposite in="shadow" in2="blob" operator="over" result="shadowedBlob"/>
                     <feComposite in="specularInBlob" in2="shadowedBlob" operator="over" />
                 </filter>
+
+                {/* [Optimized] Gradients for Separate/Gomoku mode (Zero Performance Cost) */}
+                <radialGradient id="grad-separate-black" cx="30%" cy="30%" r="50%" fx="30%" fy="30%">
+                    <stop offset="0%" stopColor="#666666" />
+                    <stop offset="100%" stopColor="#000000" />
+                </radialGradient>
+                <radialGradient id="grad-separate-white" cx="35%" cy="35%" r="50%" fx="35%" fy="35%">
+                    <stop offset="0%" stopColor="#ffffff" />
+                    <stop offset="100%" stopColor="#e0e0e0" />
+                </radialGradient>
+
+                {/* Skeuomorphic uses solid colors + shadow layers, no gradients needed */}
 
                 <filter id="qi-blur">
                     <feGaussianBlur in="SourceGraphic" stdDeviation={CELL_SIZE * 0.3} />
