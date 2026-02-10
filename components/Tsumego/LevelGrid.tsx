@@ -10,7 +10,59 @@ interface LevelGridProps {
     onBack: () => void;
 }
 
+
 const ITEMS_PER_PAGE = 50;
+
+interface FolderItemProps {
+    name: string;
+    onClick: (name: string) => void;
+}
+
+const FolderItem = React.memo(({ name, onClick }: FolderItemProps) => (
+    <button
+        onClick={() => onClick(name)}
+        className="aspect-square rounded-xl bg-[#fff8e1] border-2 border-[#e3c086] flex flex-col items-center justify-center text-[#5c4033] hover:shadow-md hover:-translate-y-1 transition-all active:scale-95 group relative overflow-hidden"
+    >
+        {/* Folder visual */}
+        <div className="absolute top-0 right-0 p-1 opacity-10 group-hover:opacity-20 transition-opacity">
+            <Folder size={64} fill="currentColor" />
+        </div>
+        <Folder size={40} className="text-[#d4a04d] mb-2 drop-shadow-sm group-hover:scale-110 transition-transform" fill="currentColor" fillOpacity={0.2} />
+        <span className="text-sm font-black line-clamp-2 px-1 text-center w-full leading-tight">{name}</span>
+        <span className="text-[10px] bg-[#e3c086]/30 px-2 py-0.5 rounded-full mt-1 text-[#8b5a2b]/80 font-bold">Folder</span>
+    </button>
+));
+
+interface LevelItemProps {
+    level: TsumegoLevel;
+    isCompleted: boolean;
+    name: string;
+    onSelect: (level: TsumegoLevel) => void;
+}
+
+const LevelItem = React.memo(({ level, isCompleted, name, onSelect }: LevelItemProps) => {
+    const displayName = name.replace('.sgf', ''); // Cleaner name
+    return (
+        <button
+            onClick={() => onSelect(level)}
+            className={`
+                aspect-square rounded-xl border-[3px] flex flex-col items-center justify-center relative shadow-sm
+                transition-all duration-200 active:scale-95
+                ${isCompleted 
+                    ? 'bg-[#81c784] border-[#2e7d32] text-white' 
+                    : 'bg-white border-[#e3c086] text-[#5c4033] hover:bg-[#fff8e1] hover:-translate-y-1 hover:shadow-md'
+                }
+            `}
+        >
+            {isCompleted ? (
+                <Check size={28} strokeWidth={3} className="drop-shadow-sm" />
+            ) : (
+                <span className="text-sm font-black line-clamp-2 leading-tight px-1 text-center">{displayName}</span>
+            )}
+        </button>
+    );
+});
+
 
 export const LevelGrid: React.FC<LevelGridProps> = ({ category, groupName, completedIds, onSelectLevel, onBack }) => {
 // --- New Folder Navigation Logic ---
@@ -133,48 +185,27 @@ export const LevelGrid: React.FC<LevelGridProps> = ({ category, groupName, compl
                     )}
 
                     {currentViewItems.map((item: any) => {
-                         if (item.type === 'folder') {
-                             return (
-                                 <button
-                                     key={item.name}
-                                     onClick={() => setCurrentPath(prev => [...prev, item.name])}
-                                     className="aspect-square rounded-xl bg-[#fff8e1] border-2 border-[#e3c086] flex flex-col items-center justify-center text-[#5c4033] hover:shadow-md hover:-translate-y-1 transition-all active:scale-95 group relative overflow-hidden"
-                                 >
-                                      {/* Folder visual */}
-                                      <div className="absolute top-0 right-0 p-1 opacity-10 group-hover:opacity-20 transition-opacity">
-                                          <Folder size={64} fill="currentColor" />
-                                      </div>
-                                      <Folder size={40} className="text-[#d4a04d] mb-2 drop-shadow-sm group-hover:scale-110 transition-transform" fill="currentColor" fillOpacity={0.2} />
-                                      <span className="text-sm font-black line-clamp-2 px-1 text-center w-full leading-tight">{item.name}</span>
-                                      <span className="text-[10px] bg-[#e3c086]/30 px-2 py-0.5 rounded-full mt-1 text-[#8b5a2b]/80 font-bold">Folder</span>
-                                 </button>
-                             );
-                         } else {
-                             const level = item.levelData;
-                             const isCompleted = completedSet.has(level.id);
-                             const displayName = item.name.replace('.sgf', ''); // Cleaner name
-
-                             return (
-                                <button
+                        if (item.type === 'folder') {
+                            return (
+                                <FolderItem 
+                                    key={item.name} 
+                                    name={item.name} 
+                                    onClick={(n) => setCurrentPath(prev => [...prev, n])} 
+                                />
+                            );
+                        } else {
+                            const level = item.levelData;
+                            const isCompleted = completedSet.has(level.id);
+                            return (
+                                <LevelItem
                                     key={level.id}
-                                    onClick={() => onSelectLevel(level)}
-                                    className={`
-                                        aspect-square rounded-xl border-[3px] flex flex-col items-center justify-center relative shadow-sm
-                                        transition-all duration-200 active:scale-95
-                                        ${isCompleted 
-                                            ? 'bg-[#81c784] border-[#2e7d32] text-white' 
-                                            : 'bg-white border-[#e3c086] text-[#5c4033] hover:bg-[#fff8e1] hover:-translate-y-1 hover:shadow-md'
-                                        }
-                                    `}
-                                >
-                                    {isCompleted ? (
-                                        <Check size={28} strokeWidth={3} className="drop-shadow-sm" />
-                                    ) : (
-                                        <span className="text-sm font-black line-clamp-2 leading-tight px-1 text-center">{displayName}</span>
-                                    )}
-                                </button>
-                             );
-                         }
+                                    level={level}
+                                    isCompleted={isCompleted}
+                                    name={item.name}
+                                    onSelect={onSelectLevel}
+                                />
+                            );
+                        }
                     })}
                 </div>
                 

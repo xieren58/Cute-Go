@@ -173,15 +173,21 @@ ctx.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             // === Gomoku Logic ===
             if (gameType === 'Gomoku') {
                 const board = boardState as BoardState;
+                // [Fix] Defensive: ensure `size` matches actual board dimensions.
+                // If they mismatch (e.g. stale boardSize from closure), use board.length.
+                const safeSize = board.length;
+                if (safeSize !== size) {
+                    console.warn(`[AI Worker] Board size mismatch! size=${size}, board.length=${safeSize}. Using board.length.`);
+                }
                 const player = color;
                 const opColor = player === 'black' ? 'white' : 'black';
 
                 // 1. Initial Candidates & Safety Check
                 // Fast path: if board is empty, play center
                 let hasStone = false;
-                for(let r=0; r<size; r++) for(let c=0; c<size; c++) if(board[r][c]) { hasStone = true; break; }
+                for(let r=0; r<safeSize; r++) for(let c=0; c<safeSize; c++) if(board[r][c]) { hasStone = true; break; }
                 if (!hasStone) {
-                    const center = Math.floor(size/2);
+                    const center = Math.floor(safeSize/2);
                     ctx.postMessage({ type: 'ai-response', data: { move: {x: center, y: center}, winRate: 0.5, lead: 0 } });
                     return;
                 }
@@ -198,7 +204,7 @@ ctx.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 const startTime = performance.now();
 
                 // Get Initial Candidates
-                const candidates = getCandidateMoves(board, size, 2);
+                const candidates = getCandidateMoves(board, safeSize, 2);
                 
                 // Pre-Sort candidates by static score for Iterative Deepening efficiency
                 // This gives us a good move ordering for Alpha-Beta

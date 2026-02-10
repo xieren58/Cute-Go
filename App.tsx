@@ -1189,24 +1189,42 @@ const App: React.FC = () => {
         }
     }, [isWorkerReady, isWebLoading]);
 
-    // Win Rate Calculation
+    // Win Rate Calculation with Performance Optimization
     const displayWinRate = useMemo(() => {
-        let rate = calculateWinRate(gameState.board); // Default Heuristic
-        if (settings.showWinRate && !gameState.gameOver && gameState.appMode === 'playing' && settings.gameType === 'Go') {
-            const aiColor = settings.userColor === 'black' ? 'white' : 'black';
-            if (useCloud && cloudWinRate !== 50) {
-                rate = (aiColor === 'white') ? (100 - cloudWinRate) : cloudWinRate;
-            }
-            else if (isElectronAvailable && electronWinRate !== 50) {
-                rate = (aiColor === 'white') ? (100 - electronWinRate) : electronWinRate;
-            } 
-            else if (!isElectronAvailable && isWorkerReady && settings.gameMode === 'PvAI' && webWinRate !== 50) {
-                rate = (aiColor === 'white') ? (100 - webWinRate) : webWinRate;
-            }
+        // [Optimized] Default to 50 if disabled or not applicable, preventing heavy calculation on every render
+        if (!settings.showWinRate || gameState.gameOver || gameState.appMode !== 'playing') {
+            return 50;
         }
-        if (settings.showWinRate && !gameState.gameOver && gameState.appMode === 'playing' && settings.gameType === 'Gomoku') {
-            rate = calculateGomokuWinRate(gameState.board);
+
+        let rate = 50;
+        const aiColor = settings.userColor === 'black' ? 'white' : 'black';
+
+        // Priority 1: Cloud AI
+        if (useCloud && cloudWinRate !== 50) {
+            return (aiColor === 'white') ? (100 - cloudWinRate) : cloudWinRate;
         }
+        
+        // Priority 2: Electron AI
+        if (isElectronAvailable && electronWinRate !== 50) {
+            return (aiColor === 'white') ? (100 - electronWinRate) : electronWinRate;
+        } 
+        
+        // Priority 3: Web Worker AI
+        if (!isElectronAvailable && isWorkerReady && settings.gameMode === 'PvAI' && webWinRate !== 50) {
+            return (aiColor === 'white') ? (100 - webWinRate) : webWinRate;
+        }
+
+        // Priority 4: Local Heuristic (Only if needed and no AI available)
+        // This is the heavy part. Only run if we really need a fallback estimate.
+        if (settings.gameType === 'Go') {
+             // Heuristic calculation is heavy (especially on 19x19). 
+             // Ideally we debounce this or put it in useEffect, but for now we gate it.
+             // If user wants showWinRate in pure PvP without AI, this will run.
+             rate = calculateWinRate(gameState.board);
+        } else if (settings.gameType === 'Gomoku') {
+             rate = calculateGomokuWinRate(gameState.board);
+        }
+
         return rate;
     }, [gameState.board, settings.showWinRate, gameState.gameOver, gameState.appMode, settings.gameType, settings.userColor, useCloud, cloudWinRate, isElectronAvailable, electronWinRate, isWorkerReady, settings.gameMode, webWinRate]);
 

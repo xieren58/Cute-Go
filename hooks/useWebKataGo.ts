@@ -271,18 +271,23 @@ export const useWebKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign, onAiEr
         setIsThinking(true);
         expectingResponseRef.current = true;
         
+        // [Fix] Derive size from actual board dimensions, not from boardSize prop.
+        // boardSize prop can be stale due to closure capture when switching board sizes,
+        // causing "Cannot read properties of undefined" crashes when size > board.length.
+        const actualSize = board.length;
+
         workerRef.current.postMessage({
             type: 'compute',
             data: {
                 board, 
                 history, 
                 color: playerColor,
-                size: boardSize,
+                size: actualSize,
                 simulations,
                 komi,
                 difficulty,
                 temperature,
-                gameType // [New]
+                gameType
             }
         });
         
