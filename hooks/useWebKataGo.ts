@@ -213,24 +213,26 @@ export const useWebKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign, onAiEr
         temperature: number = 0,
         gameType: GameType = 'Go' // [New]
     ) => {
-        const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-
         // Cancel any pending release since we are active again!
         if (releaseTimeoutRef.current) {
             clearTimeout(releaseTimeoutRef.current);
             releaseTimeoutRef.current = null;
         }
 
-        // [Lazy Load / Re-Init Logic]
+        // 1. Check Readiness
         const isReadyNow = isWorkerReadyRef.current && !isReleasingRef.current;
+        
+        // 2. Prepare Payload
+        const payload = { board, playerColor, history, simulations, komi, difficulty, temperature, gameType };
+
+        // 3. Handle Not Ready State
         if (!isReadyNow) {
-            console.warn(`AI requested but not ready (isReadyNow=${isReadyNow}, isInitializing=${isInitializing})`);
+            console.warn(`[WebAI] Request received but worker not ready. (Initializing=${initializingRef.current}, Worker=${!!workerRef.current})`);
             
-            // If worker exists but is 'released' (memory saved), re-init it.
-            if (workerRef.current && !isInitializing) {
-                 console.log("[WebAI] Worker exists but suspended. Re-Initializing...");
-                 pendingRequestRef.current = { board, playerColor, history, simulations, komi, difficulty, temperature, gameType };
-                 // Silent Re-init: Treat as "Thinking" to user, so no popup appears.
+            // Case A: Worker exists but is suspended/released -> Wake up (Re-init)
+            if (workerRef.current && !initializingRef.current && !isInitializing) {
+                 console.log("[WebAI] Waking up suspended worker...");
+                 pendingRequestRef.current = payload;
                  setInitStatus(""); 
                  setIsThinking(true); 
                  expectingResponseRef.current = true;
@@ -238,42 +240,51 @@ export const useWebKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign, onAiEr
                  return;
             }
 
-            // If not initialized at all, try initializing?
-            if (!isInitializing && !workerRef.current) {
-                 console.log("[WebAI] Auto-initializing for request...");
-                 pendingRequestRef.current = { board, playerColor, history, simulations, komi, difficulty, temperature, gameType };
-                 // [Fix] AI mode always needs model for analysis. 
-                 // Tsumego hints also need model for search.
-                 const needModel = gameType === 'Go'; 
-                 initializeAI({ needModel });
-            } else if (isInitializing) {
-                 // Just Queue
-                 pendingRequestRef.current = { board, playerColor, history, simulations, komi, difficulty, temperature, gameType };
+            // Case B: Worker does not exist or strictly not initialized -> Full Init
+            if (!workerRef.current && !initializingRef.current && !isInitializing) {
+                 console.log("[WebAI] Auto-initializing for pending request...");
+                 pendingRequestRef.current = payload;
+                 // Mark thinking immediately to prevent UI from allowing another move
+                 setIsThinking(true); 
+                 initializeAI({ needModel: true });
+                 return;
+            } 
+            
+            // Case C: Already Initializing -> Queue it
+            if (initializingRef.current || isInitializing) {
+                 console.log("[WebAI] Queueing request (already initializing)...");
+                 pendingRequestRef.current = payload;
+                 setIsThinking(true); // Ensure UI shows thinking state while waiting for init
+                 return;
             }
+            
+            
+            // Case D: Fallback?
             return;
         }
 
-        // [Upgrade] If worker is ready but only in 'Thin' mode and we now need a model
-        const needFullModel = true; 
-        if (isWorkerReadyRef.current && needFullModel && isThinWorkerRef.current && !isLoading && gameType === 'Go') { // Only Go needs model upgrade
-             console.log("[WebAI] Upgrading from Thin to Full Mode (Model Required for Difficulty)...");
-             pendingRequestRef.current = { board, playerColor, history, simulations, komi, difficulty, temperature, gameType };
+        // 4. Handle Upgrade (Thin -> Full)
+        // If we are in "Thin" mode (Rule only) but receive a "Go" request, we might need to upgrade?
+        // Current logic: GameType 'Go' always needs Model.
+        if (isThinWorkerRef.current && gameType === 'Go') {
+             console.log("[WebAI] Upgrading from Thin to Full Mode for Go game...");
+             pendingRequestRef.current = payload;
              setIsWorkerReady(false); 
-             isWorkerReadyRef.current = false; // Mark as not ready to trigger full init
+             isWorkerReadyRef.current = false; 
+             setIsThinking(true);
              initializeAI({ needModel: true });
              return;
         }
 
-        if (!workerRef.current || isThinking) return;
+        if (!workerRef.current) return;
+        if (expectingResponseRef.current) return; // Prevent double request
 
         logEvent('ai_request');
         
         setIsThinking(true);
         expectingResponseRef.current = true;
         
-        // [Fix] Derive size from actual board dimensions, not from boardSize prop.
-        // boardSize prop can be stale due to closure capture when switching board sizes,
-        // causing "Cannot read properties of undefined" crashes when size > board.length.
+        // Calculate Size
         const actualSize = board.length;
 
         workerRef.current.postMessage({
@@ -295,14 +306,17 @@ export const useWebKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign, onAiEr
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         timeoutRef.current = setTimeout(() => {
             if (expectingResponseRef.current) {
-                console.warn('[WebAI] Timeout! Resetting...');
+                console.warn('[WebAI] Computation Timeout! Resetting...');
+                // Don't just reset, maybe retry?
+                // For now, fail gracefully.
                 setInitStatus('AI 响应超时');
                 setIsThinking(false);
                 expectingResponseRef.current = false;
+                if (onAiError) onAiError('AI 计算超时，请刷新重试');
             }
-        }, 20000); // 20s
+        }, 25000); // Increased to 25s for mobile hiccups
 
-    }, [boardSize, isThinking, isWorkerReady, isInitializing, initializeAI]);
+    }, [isWorkerReady, isInitializing, initializeAI, onAiError]);
 
     const stopThinking = useCallback(() => {
         setIsThinking(false);

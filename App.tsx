@@ -588,12 +588,11 @@ const App: React.FC = () => {
              setIsPageVisible(visible);
              if (!visible) {
                  // Reset AI lock if we go to background
-                 if (aiTurnLock.current) {
+                if (aiTurnLock.current) {
                      console.log("[App] App hidden, resetting AI lock");
                      aiTurnLock.current = false;
                      setIsThinking(false);
-                     // Note: We don't stop electron/web engine here explicitly as they have their own handlers, 
-                     // but we must unlock the App-level coordinator.
+                     stopWebThinking(); // [Fix] Ensure WebAI is also stopped to prevent state mismatch
                  }
                  if (aiTimerRef.current) {
                      clearTimeout(aiTimerRef.current);
@@ -1541,6 +1540,7 @@ const App: React.FC = () => {
             // [Fix] Change to Standard 2-Pass Rule
             // Unlock AI thinking state
             if (isElectronAvailable && isElectronThinking) electronAiEngine.stopThinking();
+            if (isWebThinking) stopWebThinking(); // [Fix] Stop Web AI too
             setIsThinking(false);
             aiTurnLock.current = false;
         }
@@ -1628,6 +1628,8 @@ const App: React.FC = () => {
          }
 
          // Reset AI Lock on Undo
+         if (isElectronAvailable && isElectronThinking) electronAiEngine.stopThinking();
+         if (isWebThinking) stopWebThinking(); // [Fix] Abort current calculation
          aiTurnLock.current = false;
          setIsThinking(false);
          if (aiTimerRef.current) { clearTimeout(aiTimerRef.current); aiTimerRef.current = null; }
@@ -2075,9 +2077,9 @@ const App: React.FC = () => {
                         />
                     </div>
                 </div>
-                {showThinkingStatus && (
+                {(showThinkingStatus || webInitStatus) && (
                     <div className="absolute top-4 left-4 bg-white/80 px-4 py-2 rounded-full text-xs font-bold text-[#5c4033] animate-pulse border-2 border-[#e3c086] shadow-sm z-20">
-                        {useCloud ? '云端 AI 正在计算...' : (isElectronAvailable ? 'KataGo 正在计算...' : 'AI 正在思考...')}
+                        {webInitStatus ? webInitStatus : (useCloud ? '云端 AI 正在计算...' : (isElectronAvailable ? 'KataGo 正在计算...' : 'AI 正在思考...'))}
                     </div>
                 )}
                <PassConfirmationModal 
