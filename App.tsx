@@ -1196,7 +1196,6 @@ const App: React.FC = () => {
             return 50;
         }
 
-        let rate = 50;
         const aiColor = settings.userColor === 'black' ? 'white' : 'black';
 
         // Priority 1: Cloud AI
@@ -1214,19 +1213,9 @@ const App: React.FC = () => {
             return (aiColor === 'white') ? (100 - webWinRate) : webWinRate;
         }
 
-        // Priority 4: Local Heuristic (Only if needed and no AI available)
-        // This is the heavy part. Only run if we really need a fallback estimate.
-        if (settings.gameType === 'Go') {
-             // Heuristic calculation is heavy (especially on 19x19). 
-             // Ideally we debounce this or put it in useEffect, but for now we gate it.
-             // If user wants showWinRate in pure PvP without AI, this will run.
-             rate = calculateWinRate(gameState.board);
-        } else if (settings.gameType === 'Gomoku') {
-             rate = calculateGomokuWinRate(gameState.board);
-        }
-
-        return rate;
-    }, [gameState.board, settings.showWinRate, gameState.gameOver, gameState.appMode, settings.gameType, settings.userColor, useCloud, cloudWinRate, isElectronAvailable, electronWinRate, isWorkerReady, settings.gameMode, webWinRate]);
+        // [Perf] Local heuristic removed — was calling heavy flood-fill on every board change
+        return 50;
+    }, [settings.showWinRate, gameState.gameOver, gameState.appMode, settings.gameType, settings.userColor, useCloud, cloudWinRate, isElectronAvailable, electronWinRate, isWorkerReady, settings.gameMode, webWinRate]);
 
     // Lead Calculation
     const displayLead = useMemo(() => {
@@ -2033,7 +2022,7 @@ const App: React.FC = () => {
 
 
     return (
-        <div className="h-full w-full bg-[#f7e7ce] flex flex-col landscape:flex-row items-center relative select-none overflow-y-auto landscape:overflow-hidden text-[#5c4033]">
+        <div className="h-full w-full bg-[#f7e7ce] flex flex-col landscape:flex-row items-center relative select-none overflow-y-auto landscape:overflow-hidden text-[#5c4033] pt-safe pb-safe">
            
            {toastMsg && (
                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[80] bg-[#5c4033] text-[#fcf6ea] px-4 py-2 rounded-full text-xs font-bold shadow-lg border-2 border-[#8c6b38] animate-in fade-in">
@@ -2107,7 +2096,9 @@ const App: React.FC = () => {
            </div>
 
            {/* --- SIDEBAR --- */}
-           <div className="w-full landscape:w-96 flex flex-col gap-4 p-4 z-20 shrink-0 bg-[#f7e7ce] landscape:bg-[#f2e6d6] landscape:h-full landscape:border-l-4 landscape:border-[#e3c086] order-1 landscape:order-2 shadow-xl landscape:shadow-none">
+           <div 
+                className="w-full landscape:w-96 flex flex-col gap-4 px-4 pb-4 pt-1 z-20 shrink-0 bg-[#f7e7ce] landscape:bg-[#f2e6d6] landscape:h-full landscape:border-l-4 landscape:border-[#e3c086] order-1 landscape:order-2 shadow-xl landscape:shadow-none"
+           >
                 <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
                         <button onClick={() => { setShowStartScreen(true); vibrate(10); }} className="btn-retro btn-brown p-3 rounded-xl"><Home size={20} /></button>

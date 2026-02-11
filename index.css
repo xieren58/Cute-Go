@@ -2,6 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pt-safe-plus-4 {
+    padding-top: calc(
+      env(safe-area-inset-top) + 4px
+    ); /* 4px (p-1) + safe-area */
+  }
+  /* Landscape specific safe area */
+  @media (orientation: landscape) {
+    .landscape\:pt-safe {
+      padding-top: env(safe-area-inset-top);
+    }
+  }
+}
+
 @font-face {
   font-family: "GenSenRounded";
   src: url("/GenSenRounded2PJP-M.otf") format("opentype");

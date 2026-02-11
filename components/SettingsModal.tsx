@@ -288,10 +288,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 <Wind size={18} />
                                 <span className="text-xs font-bold">气</span>
                             </button>
-                            <button onClick={() => setSeparatePieces(!separatePieces)} className={`btn-retro flex-1 flex flex-col items-center justify-center gap-1 px-1 py-2 rounded-xl h-16 ${separatePieces ? 'bg-[#8c6b38] border-[#5c4033] text-[#fcf6ea]' : 'bg-[#fff] border-[#e3c086] text-[#8c6b38]'}`}>
-                                <CircleDot size={18} />
-                                <span className="text-xs font-bold">独立</span>
-                            </button>
+                            {/* [Fix] Gomoku enforces separate pieces, so hide toggle */}
+                            {tempGameType !== 'Gomoku' && (
+                                <button onClick={() => setSeparatePieces(!separatePieces)} className={`btn-retro flex-1 flex flex-col items-center justify-center gap-1 px-1 py-2 rounded-xl h-16 ${separatePieces ? 'bg-[#8c6b38] border-[#5c4033] text-[#fcf6ea]' : 'bg-[#fff] border-[#e3c086] text-[#8c6b38]'}`}>
+                                    <CircleDot size={18} />
+                                    <span className="text-xs font-bold">独立</span>
+                                </button>
+                            )}
                         </div>
 
                         {/* Import/Export Button */}

@@ -119,8 +119,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   }, [boardSize, showCoordinates]);
 
   // 当棋盘变化（落子）时，清除之前的气流显示
+  // [Perf] Only update state if segments exist, avoiding an unnecessary extra render cycle
   useEffect(() => {
-    setActiveQiSegments([]);
+    setActiveQiSegments(prev => prev.length > 0 ? [] : prev);
   }, [board]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -409,7 +410,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   // [Refactor] Memoize groups for both Faces and Rendering logic
   const groups = useMemo(() => {
     // Only compute groups for Go/Standard modes
-    if (gameType === 'Gomoku') return [];
+    // if (gameType === 'Gomoku') return []; // [Fix] Gomoku now uses standard rendering which needs groups!
     return getAllGroups(board);
   }, [board, gameType]);
 
@@ -428,35 +429,15 @@ export const GameBoard: React.FC<GameBoardProps> = ({
 
     // const groups = getAllGroups(board); // Replaced by memo above
 
+    // const groups = getAllGroups(board); // Replaced by memo above
+
+    // [Fix] User requested "One Face Per Group" for Go, even if separate pieces is ON.
+    // Previously, separate pieces mode forced 1 face per stone. We now skip this block for Go.
+    /* 
     if (separatePieces) {
-        return groups.flatMap(group => {
-            let mood: 'happy' | 'neutral' | 'worried' = 'happy';
-            if (group.liberties === 1) mood = 'worried';
-            else if (group.liberties <= 3) mood = 'neutral';
-
-            // Calculate look direction towards liberties (optional, keeps them alive)
-            let lookOffset = { x: 0, y: 0 };
-            if (group.libertyPoints && group.libertyPoints.length > 0) {
-                 let lx = 0, ly = 0;
-                 group.libertyPoints.forEach(p => { lx += p.x; ly += p.y; });
-                 lx /= group.libertyPoints.length;
-                 ly /= group.libertyPoints.length;
-                 const dx = lx - group.stones[0].x; // Approx direction from first stone... 
-                 // actually simpler to just look at center of liberties from each stone? 
-                 // Let's keep it simple for now: distinct stones, standard face.
-            }
-
-            return group.stones.map(stone => ({
-                id: stone.id,
-                x: stone.x,
-                y: stone.y,
-                mood,
-                color: stone.color,
-                scale: 1, // No deformation
-                lookOffset: { x: 0, y: 0 } // Reset look for simplicity in separate mode
-            }));
-        });
+       // ... (Legacy Separate Face Logic)
     }
+    */
 
     return groups.map(group => {
         let sumX = 0;
@@ -757,13 +738,14 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     const isGomoku = gameType === 'Gomoku';
     // [Refactor] "Separate" rendering path applied for Gomoku OR explicit separate setting
     // In this mode, we render stones individually with their own filters
-    const useSeparateRendering = isGomoku || separatePieces;
+    // [Fix] User requested Gomoku essentially behaves as "Separate Pieces" by default
+    const useSeparateRendering = gameType === 'Gomoku' || separatePieces;
 
     // Helper to render the actual shapes (Lines + Circles + Fillers)
     // We pass color/width override to allow drawing "Shadow/Highlight" layers
     const renderShapes = (drawColor: string, isMainLayer: boolean, opacity: number = 1.0) => {
         // [Fix] Ortho connection width should match stone diameter (2 * 0.45 = 0.9)
-        const orthoWidth = isGomoku ? CELL_SIZE * 0.2 : CELL_SIZE * 0.9;
+        const orthoWidth = CELL_SIZE * 0.9;
         
         // Define Filter ID (only for classic theme)
         let filterId = undefined;
@@ -777,7 +759,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
 
         const styleFilter = theme.filter ? { filter: theme.filter } : undefined;
         const borderColor = color === 'black' ? theme.blackBorder : theme.whiteBorder;
-        const strokeW = isGomoku ? 1 : 0;
+        const strokeW = 0;
 
         // [Fix] For minimal theme, main body should NOT have a stroke to allow fusion
         const effectiveStroke = (isMinimal && isMainLayer) ? 'none' : (isMainLayer ? borderColor : 'none');
@@ -791,7 +773,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
         // This ensures it goes through PATH B (Connected Groups) for stone fusion effect.
 
         // --- PATH B: Separate Rendering (Gomoku / Separate Mode - Classic) ---
-        if (useSeparateRendering) {
+        if (useSeparateRendering && !isSkeuomorphic && !isMinimal) {
             const myStones = stones.filter(s => s.color === color);
             // [Optimization] Use Radial Gradients + Simple Shadow instead of Filters
             // This is effectively instant to render (Vector vs Raster Filter)
@@ -823,89 +805,66 @@ export const GameBoard: React.FC<GameBoardProps> = ({
         }
 
         // --- PATH B: Connected Groups Rendering (Standard Go) ---
-        // Iterate through groups to keep filter region small (avoids Mobile Texture Limit issues)
-        const myGroups = groups.filter(g => g.stones.length > 0 && g.stones[0].color === color);
-        
+        // [Perf] Apply filter to ALL stones of a color at once (1 filter pass per color).
+        // Previously was per-group which caused N filter passes = N × 7 SVG filter stages.
+        const myStones = stones.filter(s => s.color === color);
+        const stoneSet = new Set(myStones.map(s => `${s.x},${s.y}`));
+
+        // Compute fillers (2x2 blocks) globally
+        const fillers: {x: number, y: number}[] = [];
+        if (!isMinimal) {
+            myStones.forEach(s => {
+                if (stoneSet.has(`${s.x+1},${s.y}`) && 
+                    stoneSet.has(`${s.x},${s.y+1}`) && 
+                    stoneSet.has(`${s.x+1},${s.y+1}`)) {
+                    fillers.push({ x: s.x, y: s.y });
+                }
+            });
+        }
+
         return (
-            <g opacity={opacity} style={styleFilter}>
-                 {myGroups.map(group => {
-                     const groupStones = group.stones;
-                     // [Optimization] Use Set for O(1) adjacency checks
-                     const stoneSet = new Set(groupStones.map(s => `${s.x},${s.y}`));
-                     
-                     // Generate Local Connections & Fillers
-                     // We check Right and Bottom neighbors to avoid duplicates
-                     const groupConnections = [];
-                     const groupFillers = [];
+            <g filter={filterId} style={styleFilter} opacity={opacity}>
+                 {/* 1. Direct Connections (Fused Body) */}
+                 <g>
+                     {connections.filter(c => c.color === color && c.type === 'ortho').map((c, i) => (
+                         <line 
+                             key={`${color}-ortho-${i}-${drawColor}`}
+                             x1={GRID_PADDING + c.x1 * CELL_SIZE}
+                             y1={GRID_PADDING + c.y1 * CELL_SIZE}
+                             x2={GRID_PADDING + c.x2 * CELL_SIZE}
+                             y2={GRID_PADDING + c.y2 * CELL_SIZE}
+                             stroke={drawColor}
+                             strokeWidth={orthoWidth}
+                             strokeLinecap="round"
+                         />
+                     ))}
+                 </g>
 
-                     groupStones.forEach(s => {
-                         // Horizontal Connection
-                         if (stoneSet.has(`${s.x+1},${s.y}`)) {
-                             groupConnections.push({
-                                 x1: s.x, y1: s.y, x2: s.x+1, y2: s.y,
-                                 key: `${s.x},${s.y}-h`
-                             });
-                         }
-                         // Vertical Connection
-                         if (stoneSet.has(`${s.x},${s.y+1}`)) {
-                             groupConnections.push({
-                                 x1: s.x, y1: s.y, x2: s.x, y2: s.y+1,
-                                 key: `${s.x},${s.y}-v`
-                             });
-                         }
-                         // Filler (2x2 check): s is top-left
-                         // Need (x+1, y), (x, y+1), (x+1, y+1)
-                         if (!isMinimal && stoneSet.has(`${s.x+1},${s.y}`) && 
-                             stoneSet.has(`${s.x},${s.y+1}`) && 
-                             stoneSet.has(`${s.x+1},${s.y+1}`)) {
-                             groupFillers.push({ x: s.x, y: s.y });     
-                         }
-                     });
+                {/* 2. Filler Quads (Close gaps in 2x2 blocks) */}
+                {fillers.map((f, i) => (
+                     <rect
+                        key={`${color}-filler-${i}-${drawColor}`}
+                        x={GRID_PADDING + (f.x + 0.5) * CELL_SIZE - CELL_SIZE * 0.15}
+                        y={GRID_PADDING + (f.y + 0.5) * CELL_SIZE - CELL_SIZE * 0.15}
+                        width={CELL_SIZE * 0.3}
+                        height={CELL_SIZE * 0.3}
+                        fill={drawColor}
+                     />
+                ))}
 
-                     return (
-                        <g key={`group-${groupStones[0].id}`} filter={filterId}>
-                            {/* 1. Connections */}
-                            {groupConnections.map(c => (
-                                <line 
-                                    key={`conn-${c.key}-${drawColor}`}
-                                    x1={GRID_PADDING + c.x1 * CELL_SIZE}
-                                    y1={GRID_PADDING + c.y1 * CELL_SIZE}
-                                    x2={GRID_PADDING + c.x2 * CELL_SIZE}
-                                    y2={GRID_PADDING + c.y2 * CELL_SIZE}
-                                    stroke={drawColor}
-                                    strokeWidth={orthoWidth}
-                                    strokeLinecap="round"
-                                />
-                            ))}
-
-                            {/* 2. Fillers */}
-                            {groupFillers.map((f, i) => (
-                                 <rect
-                                    key={`fill-${i}-${drawColor}`}
-                                    x={GRID_PADDING + (f.x + 0.5) * CELL_SIZE - CELL_SIZE * 0.15}
-                                    y={GRID_PADDING + (f.y + 0.5) * CELL_SIZE - CELL_SIZE * 0.15}
-                                    width={CELL_SIZE * 0.3}
-                                    height={CELL_SIZE * 0.3}
-                                    fill={drawColor}
-                                 />
-                            ))}
-
-                            {/* 3. Stones */}
-                            {groupStones.map(s => (
-                                <circle
-                                    key={`st-${s.id}-${drawColor}`}
-                                    cx={GRID_PADDING + s.x * CELL_SIZE}
-                                    cy={GRID_PADDING + s.y * CELL_SIZE}
-                                    r={radius}
-                                    fill={drawColor}
-                                    stroke={effectiveStroke}
-                                    strokeWidth={effectiveStrokeWidth}
-                                    className={animatingStoneId === s.id ? 'stone-enter' : undefined}
-                                />
-                            ))}
-                        </g>
-                     );
-                 })}
+                {/* 3. Stone Bodies */}
+                {myStones.map(s => (
+                    <circle
+                        key={`st-${s.id}-${drawColor}`}
+                        cx={GRID_PADDING + s.x * CELL_SIZE}
+                        cy={GRID_PADDING + s.y * CELL_SIZE}
+                        r={radius}
+                        fill={drawColor}
+                        stroke={effectiveStroke}
+                        strokeWidth={effectiveStrokeWidth}
+                        className={animatingStoneId === s.id ? 'stone-enter' : undefined}
+                    />
+                ))}
             </g>
         );
     };
@@ -966,37 +925,24 @@ export const GameBoard: React.FC<GameBoardProps> = ({
         const theme = STONE_THEMES[stoneSkin as StoneThemeId] || STONE_THEMES['classic'];
         const baseColor = color === 'black' ? theme.blackColor : theme.whiteColor;
         const isGomoku = gameType === 'Gomoku';
-        const trim = isGomoku ? STONE_RADIUS * 0.7 : 0;
-        const filterId = isGomoku ? 'url(#goo-silk-gomoku)' : 'url(#goo-silk)';
-        const groupClass = isGomoku ? 'animate-liquid-flow-gomoku' : 'animate-liquid-flow';
-        const opacity = isGomoku ? 0.4 : 0.65;
+
+        // Gomoku: no silk lines
+        if (isGomoku) return null;
+
+        // [Perf] Use CSS drop-shadow instead of SVG goo-silk filter.
+        // SVG filters force full re-rasterization on any geometry change (like stroke-width anim).
+        // CSS drop-shadow is GPU-accelerated and much cheaper.
+        const silkShadow = { filter: `drop-shadow(0px 0px ${CELL_SIZE * 0.08}px ${baseColor})` };
+        const strokeWidth = CELL_SIZE * 0.15;
     
         return (
-            <g opacity={opacity} filter={filterId}>
-                <g className={groupClass}>
+            <g opacity={0.65} style={silkShadow}>
+                <g className="animate-liquid-flow">
                     {connections.filter(c => c.color === color && c.type === 'loose').map((c, i) => {
                         const x1 = GRID_PADDING + c.x1 * CELL_SIZE;
                         const y1 = GRID_PADDING + c.y1 * CELL_SIZE;
                         const x2 = GRID_PADDING + c.x2 * CELL_SIZE;
                         const y2 = GRID_PADDING + c.y2 * CELL_SIZE;
-
-                        const strokeWidth = isGomoku ? CELL_SIZE * 0.1 : CELL_SIZE * 0.12;
-
-                        if (isGomoku) {
-                            const dx = x2 - x1;
-                            const dy = y2 - y1;
-                            const len = Math.hypot(dx, dy) || 1;
-                            const ux = dx / len;
-                            const uy = dy / len;
-                            return (
-                                <line 
-                                    key={`${color}-loose-${i}`}
-                                    x1={x1 + ux * trim} y1={y1 + uy * trim}
-                                    x2={x2 - ux * trim} y2={y2 - uy * trim}
-                                    stroke={baseColor} strokeWidth={strokeWidth} strokeLinecap="round"
-                                />
-                            );
-                        }
 
                         return (
                             <line 
@@ -1010,6 +956,42 @@ export const GameBoard: React.FC<GameBoardProps> = ({
             </g>
         );
     };
+
+  // [Perf] Memoize expensive SVG render outputs.
+  // Prevents unnecessary SVG DOM recreation and filter reprocessing during unrelated re-renders.
+  const renderedBlackStones = useMemo(() => renderStoneBody('black'),
+    [stones, groups, connections, stoneSkin, gameType, separatePieces, CELL_SIZE, GRID_PADDING, STONE_RADIUS, animatingStoneId]);
+  const renderedWhiteStones = useMemo(() => renderStoneBody('white'),
+    [stones, groups, connections, stoneSkin, gameType, separatePieces, CELL_SIZE, GRID_PADDING, STONE_RADIUS, animatingStoneId]);
+  const renderedBlackSilk = useMemo(() => renderLooseSilk('black'),
+    [connections, stoneSkin, gameType, CELL_SIZE, GRID_PADDING, STONE_RADIUS]);
+  const renderedWhiteSilk = useMemo(() => renderLooseSilk('white'),
+    [connections, stoneSkin, gameType, CELL_SIZE, GRID_PADDING, STONE_RADIUS]);
+  const renderedFaces = useMemo(() => (
+    <g>
+    {groupFaces.map(face => (
+        <g 
+            key={`face-group-${face.id}`} 
+            className="face-enter transition-all duration-300 ease-out"
+            style={{ 
+                transformOrigin: 'center',
+                transform: `translate(${GRID_PADDING + face.x * CELL_SIZE}px, ${GRID_PADDING + face.y * CELL_SIZE}px)`
+            }}
+        >
+            <g transform={`translate(${-CELL_SIZE/2}, ${-CELL_SIZE/2})`}>
+                <StoneFace
+                    x={0}
+                    y={0}
+                    size={CELL_SIZE}
+                    color={face.color === 'black' ? '#fff' : '#333'}
+                    mood={face.mood}
+                    lookOffset={face.lookOffset}
+                />
+            </g>
+        </g>
+    ))}
+    </g>
+  ), [groupFaces, CELL_SIZE, GRID_PADDING]);
 
   return (
     <div 
@@ -1033,19 +1015,15 @@ export const GameBoard: React.FC<GameBoardProps> = ({
             animation: pulseSlow 4s ease-in-out infinite;
             transform-origin: center;
         }
+        /* [Perf] Animate opacity instead of stroke-width.
+           stroke-width changes force SVG filter re-rasterization at 60fps.
+           opacity is GPU-composited and essentially free. */
         @keyframes liquidFlow {
-            0%, 100% { stroke-width: ${CELL_SIZE * 0.12}px; }
-            50% { stroke-width: ${CELL_SIZE * 0.22}px; }
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
         }
         .animate-liquid-flow line {
             animation: liquidFlow 2.5s ease-in-out infinite;
-        }
-        @keyframes liquidFlowGomoku {
-            0%, 100% { stroke-width: ${CELL_SIZE * 0.22}px; }
-            50% { stroke-width: ${CELL_SIZE * 0.13}px; }
-        }
-        .animate-liquid-flow-gomoku line {
-            animation: liquidFlowGomoku 3s ease-in-out infinite;
         }
 
         /* [新增] 气流动动画 */
@@ -1082,17 +1060,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
         >
             {extraSVG}
             <defs>
-                <filter id="goo-silk">
-                    <feGaussianBlur in="SourceGraphic" stdDeviation={CELL_SIZE * 0.15} result="blur" />
-                    <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 25 -10" result="goo" />
-                    <feComposite in="SourceGraphic" in2="goo" operator="atop"/>
-                </filter>
-
-                <filter id="goo-silk-gomoku">
-                    <feGaussianBlur in="SourceGraphic" stdDeviation={CELL_SIZE * 0.08} result="blur" />
-                    <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -9" result="goo" />
-                    <feComposite in="SourceGraphic" in2="goo" operator="atop"/>
-                </filter>
+                {/* [Perf] goo-silk SVG filters removed — replaced with CSS drop-shadow in renderLooseSilk */}
 
                 <filter id="jelly-black" x="-50%" y="-50%" width="200%" height="200%">
                     <feGaussianBlur in="SourceGraphic" stdDeviation={CELL_SIZE * 0.1} result="blur" />
@@ -1204,35 +1172,13 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                 <circle key={`star-${i}`} cx={GRID_PADDING + x * CELL_SIZE} cy={GRID_PADDING + y * CELL_SIZE} r={boardSize > 13 ? 2 : 3} fill="#5c4033" />
             ))}
 
-            {renderLooseSilk('black')}
-            {renderLooseSilk('white')}
+            {renderedBlackSilk}
+            {renderedWhiteSilk}
 
-            {renderStoneBody('black')}
-            {renderStoneBody('white')}
+            {renderedBlackStones}
+            {renderedWhiteStones}
 
-            <g>
-            {groupFaces.map(face => (
-                <g 
-                    key={`face-group-${face.id}`} 
-                    className="face-enter transition-all duration-300 ease-out"
-                    style={{ 
-                        transformOrigin: 'center',
-                        transform: `translate(${GRID_PADDING + face.x * CELL_SIZE}px, ${GRID_PADDING + face.y * CELL_SIZE}px)`
-                    }}
-                >
-                    <g transform={`translate(${-CELL_SIZE/2}, ${-CELL_SIZE/2})`}>
-                        <StoneFace
-                            x={0}
-                            y={0}
-                            size={CELL_SIZE}
-                            color={face.color === 'black' ? '#fff' : '#333'}
-                            mood={face.mood}
-                            lookOffset={face.lookOffset}
-                        />
-                    </g>
-                </g>
-            ))}
-            </g>
+            {renderedFaces}
 
             {lastMove && (
                 <circle 

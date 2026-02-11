@@ -9,7 +9,7 @@ interface FaceProps {
   lookOffset?: { x: number, y: number };
 }
 
-export const StoneFace: React.FC<FaceProps> = ({ x, y, size, color, mood, lookOffset }) => {
+export const StoneFace: React.FC<FaceProps> = React.memo(({ x, y, size, color, mood, lookOffset }) => {
   const cx = x + size / 2;
   const cy = y + size / 2;
   const scale = size * 0.55; 
@@ -92,4 +92,4 @@ export const StoneFace: React.FC<FaceProps> = ({ x, y, size, color, mood, lookOf
       {getFaceContent()}
     </g>
   );
-};
+});
