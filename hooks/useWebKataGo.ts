@@ -31,6 +31,8 @@ export const useWebKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign, onAiEr
     const releaseTimeoutRef = useRef<NodeJS.Timeout | null>(null); // [New] Deferred Release
     const isReleasingRef = useRef(false); // [Fix] Race Condition Lock
 
+    const requestTypeRef = useRef<'move' | 'analyze'>('move'); // [New] Track request type
+
     // Initialization Function
     const initializeAI = useCallback((options: { needModel: boolean } = { needModel: true }) => {
         if (initializingRef.current || workerRef.current) {
@@ -117,6 +119,7 @@ export const useWebKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign, onAiEr
                     setIsInitializing(false);
                     setInitStatus(isThinWorkerRef.current ? '规则引擎就绪' : 'AI 引擎就绪');
                     initializingRef.current = false;
+                    expectingResponseRef.current = false; // [Fix] Clear this so pending request can be sent
                     
                     // Execute Pending
                     if (pendingRequestRef.current) {
@@ -141,10 +144,13 @@ export const useWebKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign, onAiEr
                     setIsThinking(false);
                     expectingResponseRef.current = false;
 
-                    if (move) onAiMove(move.x, move.y);
-                    else onAiPass();
+                    if (requestTypeRef.current === 'move') {
+                        if (move) onAiMove(move.x, move.y);
+                        else onAiPass();
+                    } else {
+                        console.log("[WebAI] Analysis complete.");
+                    }
                     
-
 
                 } else if (msg.type === 'released') {
                     console.log("[WebAI] Worker memory released (Suspended).");
@@ -188,6 +194,58 @@ export const useWebKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign, onAiEr
         }
 
     }, [boardSize, onAiMove, onAiPass, isWorkerReady, isInitializing]);
+
+
+
+    // [New] Request Analysis Only
+    const requestAnalysis = useCallback((
+        board: BoardState, 
+        playerColor: Player, 
+        history: any[], 
+        komi: number = 7.5,
+        gameType: GameType = 'Go'
+    ) => {
+        if (!workerRef.current || !isWorkerReadyRef.current) {
+             // If not ready, maybe define pending? 
+             // For now, simple return or init. Analysis is less critical than move.
+             if (!initializingRef.current) {
+                 initializeAI({ needModel: true });
+             }
+             return;
+        }
+
+        if (expectingResponseRef.current) return; // Busy
+        
+        setIsThinking(true);
+        expectingResponseRef.current = true;
+        requestTypeRef.current = 'analyze';
+
+        workerRef.current.postMessage({
+            type: 'compute',
+            data: {
+                board,
+                history,
+                color: playerColor,
+                size: board.length,
+                simulations: 100, // Low simulations for quick analysis? Or standard?
+                komi,
+                difficulty: 'Hard',
+                temperature: 0,
+                gameType,
+                mode: 'analyze'
+            }
+        });
+
+        // Timeout (Same as move)
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        timeoutRef.current = setTimeout(() => {
+             if (expectingResponseRef.current) {
+                 setIsThinking(false);
+                 expectingResponseRef.current = false;
+             }
+        }, 25000);
+
+    }, [isWorkerReady, initializeAI]);
 
     // Cleanup
     useEffect(() => {
@@ -284,6 +342,8 @@ export const useWebKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign, onAiEr
         setIsThinking(true);
         expectingResponseRef.current = true;
         
+        requestTypeRef.current = 'move'; // [New] Set type
+
         // Calculate Size
         const actualSize = board.length;
 
@@ -298,7 +358,8 @@ export const useWebKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign, onAiEr
                 komi,
                 difficulty,
                 temperature,
-                gameType
+                gameType,
+                mode: 'play' // Explicitly set mode
             }
         });
         
@@ -333,13 +394,24 @@ export const useWebKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign, onAiEr
         setAiLead(null);
         setAiScoreStdev(null);
         setAiTerritory(null);
+        
+        // [Fix] Full cleanup similar to stopThinking
         setIsThinking(false);
         setIsLoading(false);
         setInitStatus('');
         expectingResponseRef.current = false;
+        pendingRequestRef.current = null; // Clear pending
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+        }
+        
+        // [Fix] Immediately mark worker as not ready, don't wait for 'released' ack
+        // This prevents race conditions where we might try to use a dying worker
+        setIsWorkerReady(false);
+        isWorkerReadyRef.current = false;
         
         // [Performance Fix] Explicitly release AI Engine memory between games.
-        // This prevents memory leaks/accumulation in WASM heap or OnnxRuntime session related to history.
         // The worker will auto-reinitialize the engine on the next move request.
         if (workerRef.current) {
              console.log("[WebAI] Sending RELEASE command to worker for cleanup.");
@@ -373,6 +445,7 @@ export const useWebKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign, onAiEr
         aiScoreStdev,
         aiTerritory,
         requestWebAiMove,
+        requestAnalysis, // [New] Exported
         stopThinking,
         initializeAI,
         resetAI // [New]

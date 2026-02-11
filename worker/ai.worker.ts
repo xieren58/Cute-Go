@@ -169,6 +169,7 @@ ctx.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         } else if (msg.type === 'compute') {
             const { board: boardState, history: gameHistory, color, size, gameType = 'Go', komi, difficulty, temperature } = msg.data;
+            console.log(`[AI Worker] Compute Request Received. Type=${gameType}, Size=${size}, Diff=${difficulty}`); 
 
             // === Gomoku Logic ===
             if (gameType === 'Gomoku') {
@@ -302,6 +303,56 @@ ctx.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 });
                 return;
             }
+            
+            // --- Blunder Logic (Artificial Stupidity for Easy/Medium) ---
+            // We do this BEFORE the heavy AI engine to save performance and create "natural" mistakes.
+            if ((gameType === 'Go' || gameType === undefined) && (difficulty === 'Easy' || difficulty === 'Medium')) {
+                const blunderChance = difficulty === 'Easy' ? 0.20 : 0.05; // 20% for Easy, 5% for Medium
+                console.log(`[AI Worker] Checking Blunder Logic. Chance=${blunderChance}, Random=${Math.random()}`);
+                if (Math.random() < blunderChance) {
+                    console.log(`[AI Worker] Triggering Blunder for ${difficulty} mode...`);
+                    const board = boardState as BoardState;
+                    const safeSize = board.length;
+                    
+                    // Generate random moves
+                    const attempts = 50; 
+                    for(let i=0; i<attempts; i++) {
+                        const rx = Math.floor(Math.random() * safeSize);
+                        const ry = Math.floor(Math.random() * safeSize);
+                        
+                        // Check basic legality (empty)
+                        if (!board[ry][rx]) {
+                             // Check suicide/ko rules using attemptMove
+                             // We need a history logic? 
+                             // For simplicity in blunder, we can just check if it's not suicide.
+                             // We'll use the proper AttemptMove with empty history (or just prevHash if available) to be safe.
+                             // But wait, `attemptMove` needs full board? Yes, we have `board`.
+                             
+                             let pHash: string | null = null;
+                             if (gameHistory.length > 0) {
+                                  const last = gameHistory[gameHistory.length-1];
+                                  if (last && last.board) pHash = getBoardHash(last.board);
+                             }
+
+                             const isValid = attemptMove(board, rx, ry, color, 'Go', pHash);
+                             if (isValid) {
+                                  console.log(`[AI Worker] Blunder Move Selected: (${rx}, ${ry})`);
+                                  ctx.postMessage({ 
+                                      type: 'ai-response', 
+                                      data: { 
+                                          move: { x: rx, y: ry }, 
+                                          winRate: 0.4, // Fake winrate
+                                          lead: 0,
+                                          ownership: []
+                                      } 
+                                  });
+                                  return; // Stop here, skip engine!
+                             }
+                        }
+                    }
+                    console.log("[AI Worker] Failed to find valid blunder move, falling back to Engine.");
+                }
+            }
 
             // === Go Logic (Engine) ===
             if (!engine) {
@@ -358,177 +409,118 @@ ctx.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             }
             
             // 3. Run Analysis
-                const result = await engine.analyze(board, pla, {
-                    history: historyMoves,
-                    komi: komi ?? 7.5,
-                    difficulty: difficulty,
-                    temperature: temperature
-                });
+            console.log("[AI Worker] Calling engine.analyze...");
+            const result = await engine.analyze(board, pla, {
+                 history: historyMoves,
+                 komi: komi ?? 7.5,
+                 difficulty: difficulty,
+                temperature: temperature
+            });
+            console.log("[AI Worker] Analysis returned.");
 
             // 4. Send Response
-            // Select best move
-            // 4. Send Response
-            // Select best move with Validation
+            
+            // Check for Analysis Mode (No Move Selection)
+            // @ts-ignore
+            if (msg.data.mode === 'analyze') {
+                 console.log("[AI Worker] Analysis Mode: Returning stats only.");
+                 ctx.postMessage({
+                    type: 'ai-response',
+                    data: {
+                        move: null, // No move
+                        winRate: result.rootInfo.winrate,
+                        lead: result.rootInfo.lead,
+                        scoreStdev: result.rootInfo.scoreStdev,
+                        ownership: result.rootInfo.ownership
+                    }
+                });
+                return;
+            }
+
+            // Normal Move Selection
+            let selectedMove: any = null;
+            
             if (result.moves.length > 0) {
-                 // [Fix] Logic:
-                 // If temperature > 0, result.moves is a weighted list. We must sample from it AND validate.
-                 // If temperature == 0, result.moves is sorted by prob. We take the firstvalid.
-                 
-                 let selectedMove: any = null;
-                 
-                 // Reconstruct Board State Logic for Validation
-                 // construct a "Real" board state from history to check against
-                 // We can use the history to rebuild the board state for `attemptMove` validation
-                 const currentRealBoard = Array(size).fill(null).map(() => Array(size).fill(null));
-                 // But wait, `gameHistory` passed in might be complex objects? 
-                 // msg.data.history is `any[]`, likely the full history objects from App.tsx.
-                 // Yes, App.tsx passes `gameState.history`.
-                 
-                 // Optimization: The `boardState` passed in `msg.data.board` IS the current board state.
-                 // We can use that directly.
                  const validationBoard = boardState as BoardState;
                  
-                 // We also need `prevHash` to check Superko (Simple Ko check in attemptMove might be enough for simple cases, 
-                 // but strict Superko needs history. `attemptMove` accepts `previousBoardStateHash`.
-                 // Let's get the hash of the board *before* the last move? 
-                 // Actually `attemptMove` checks: `if (getBoardHash(newBoard) === previousBoardStateHash)` - wait.
-                 // `attemptMove` in `goLogic` uses `previousBoardStateHash` to check if *resulting* board matches it. 
-                 // That's for simple Ko (immediate repetition). 
-                 // Perfect Superko needs full history check, but `goLogic` only supports simple Ko via that param.
-                 // However, we can improve this by checking against *all* history hashes?
-                 // For now, let's at least check Simple Ko using the hash of the board from 1 turn ago.
-                 
+                 // Reconstruct prevHash (Simple Ko Check)
                  let prevHash: string | null = null;
                  if (gameHistory.length > 0) {
-                     // The last history item contains the board BEFORE the current move? 
-                     // No, history contains the board AFTER that move.
-                     // The board state *before* the current move is `boardState`.
-                     // The board state *before* `boardState` (previous turn) is `gameHistory[last]`.
-                     // So we check if `newBoard` matches `gameHistory[last].board`? That would be just reverting to previous state (Simple Ko).
                      const lastItem = gameHistory[gameHistory.length - 1];
                      if (lastItem && lastItem.board) prevHash = getBoardHash(lastItem.board);
                  }
 
-                 if (temperature && temperature > 0) {
-                     // Sampling Loop
-                     // result.moves is sorted by weight (descending)
-                     
-                     // Helper: Calculate sum (should be ~1.0 if normalized, or sum of weights)
-                     // The `extractMoves` returned weighted objects.
-                     // We need to sample from THEM.
-                     
-                     // Make a copy to consume
-                     const candidates = [...result.moves];
-                     
-                     // Retry loop (max 10 tries)
-                     for (let retry = 0; retry < 20; retry++) {
-                         if (candidates.length === 0) break;
+                 // Candidates list
+                 let candidates = [...result.moves];
 
-                         // Calculate Sum
-                         let sumWeight = 0;
-                         for (const m of candidates) sumWeight += (m as any).weight || m.prior; // Handle both cases just in case
-                         
-                         let r = Math.random() * sumWeight;
-                         let pickedIndex = -1;
-                         
-                         for (let i = 0; i < candidates.length; i++) {
-                             const w = (candidates[i] as any).weight || candidates[i].prior;
-                             r -= w;
-                             if (r <= 0) {
-                                 pickedIndex = i;
+                 if (temperature && temperature > 0) {
+                     // Weight-based Sampling (Retry loop for validity)
+                     for (let retry = 0; retry < 20; retry++) {
+                          if (candidates.length === 0) break;
+
+                          let sumWeight = 0;
+                          for (const m of candidates) sumWeight += (m as any).weight || m.prior;
+                          
+                          let r = Math.random() * sumWeight;
+                          let pickedIndex = -1;
+                          for (let i = 0; i < candidates.length; i++) {
+                              const w = (candidates[i] as any).weight || candidates[i].prior;
+                              r -= w;
+                              if (r <= 0) { pickedIndex = i; break; }
+                          }
+                          if (pickedIndex === -1) pickedIndex = candidates.length - 1;
+
+                          const candidate = candidates[pickedIndex];
+                          if (candidate.x === -1) { selectedMove = null; break; } // Pass is valid
+                          
+                          if (attemptMove(validationBoard, candidate.x, candidate.y, color, 'Go', prevHash)) {
+                               selectedMove = { x: candidate.x, y: candidate.y };
+                               break;
+                          } else {
+                               candidates.splice(pickedIndex, 1); // Remove invalid
+                          }
+                     }
+                     // Fallback to best valid if sampling failed
+                     if (selectedMove === undefined) {
+                         for (const m of result.moves) {
+                             if (m.x === -1) { selectedMove = null; break; }
+                             if (attemptMove(validationBoard, m.x, m.y, color, 'Go', prevHash)) {
+                                 selectedMove = { x: m.x, y: m.y };
                                  break;
                              }
                          }
-                         if (pickedIndex === -1 && candidates.length > 0) pickedIndex = candidates.length - 1; // Rounding error
-                         
-                         const candidate = candidates[pickedIndex];
-                         
-                         // Validate
-                         if (candidate.x === -1) {
-                             // Pass is always valid
-                             selectedMove = null;
-                             break;
-                         } else {
-                             const isValid = attemptMove(
-                                 validationBoard, 
-                                 candidate.x, 
-                                 candidate.y, 
-                                 color, 
-                                 'Go', 
-                                 prevHash
-                             );
-                             
-                             if (isValid) {
-                                  selectedMove = { x: candidate.x, y: candidate.y };
-                                  break;
-                             } else {
-                                  // Remove and retry
-                                  // console.log(`[Worker] Rejected Illegal AI Candidate: (${candidate.x},${candidate.y})`);
-                                  candidates.splice(pickedIndex, 1);
-                             }
-                         }
                      }
-                     
-                     // Fallback if all sampled failed (unlikely): Pick top valid (Argmax)
-                     if (selectedMove === undefined) { // Null is valid (Pass), undefined means no selection
-                          for (const m of result.moves) {
-                              if (m.x === -1) { selectedMove = null; break; }
-                              if (attemptMove(validationBoard, m.x, m.y, color, 'Go', prevHash)) {
-                                  selectedMove = { x: m.x, y: m.y };
-                                  break;
-                              }
-                          }
-                     }
-                     
                  } else {
-                     // Argmax (Temp = 0)
-                     // Just Iterate through sorted moves and pick first valid
+                     // Argmax (Iterate sorted)
                      for (const m of result.moves) {
-                         if (m.x === -1) {
-                             selectedMove = null;
-                             break;
-                         }
-                         const isValid = attemptMove(
-                             validationBoard, 
-                             m.x, 
-                             m.y, 
-                             color, 
-                             'Go', 
-                             prevHash
-                         );
-                         if (isValid) {
+                         if (m.x === -1) { selectedMove = null; break; }
+                         if (attemptMove(validationBoard, m.x, m.y, color, 'Go', prevHash)) {
                              selectedMove = { x: m.x, y: m.y };
                              break;
                          }
                      }
                  }
-
-                 // If still undefined (no valid moves found??), Pass.
-                 if (selectedMove === undefined) selectedMove = null;
-
-                 ctx.postMessage({ 
-                      type: 'ai-response', 
-                      data: { 
-                          move: selectedMove, 
-                          winRate: result.rootInfo.winrate,
-                          lead: result.rootInfo.lead,
-                          scoreStdev: result.rootInfo.scoreStdev,
-                          ownership: result.rootInfo.ownership
-                      } 
-                 });
             } else {
-                 // No moves? Pass.
-                 ctx.postMessage({ 
-                     type: 'ai-response', 
-                     data: { 
-                         move: null, 
-                         winRate: result.rootInfo.winrate,
-                         lead: result.rootInfo.lead,
-                         ownership: result.rootInfo.ownership
-                     } 
-                 });
+                selectedMove = null; // Pass
             }
+            
+            if (selectedMove === undefined) selectedMove = null; // Safety
 
+            const isPass = selectedMove === null;
+            // Only log if not null or valid object
+            const moveStr = isPass ? 'Pass' : `(${selectedMove.x},${selectedMove.y})`;
+            console.log(`[AI Worker] Best Move: ${moveStr} Win=${result.rootInfo.winrate.toFixed(1)}%`);
+
+            ctx.postMessage({
+                type: 'ai-response',
+                data: {
+                    move: selectedMove,
+                    winRate: result.rootInfo.winrate,
+                    lead: result.rootInfo.lead,
+                    scoreStdev: result.rootInfo.scoreStdev,
+                    ownership: result.rootInfo.ownership
+                }
+            });
         } else if (msg.type === 'stop') {
             // No-op for now as ONNX run is atomicish. 
             // We could set a flag if we had a loop.

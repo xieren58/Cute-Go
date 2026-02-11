@@ -18,7 +18,7 @@ export function getAIConfig(difficulty: string): AIConfig {
             useModel: true, // Now using b6 model
             simulations: 1, 
             randomness: 0,
-            temperature: 2.0, // High variety
+            temperature: 2.5, // Increased variety + Blunder logic in worker
             heuristicFactor: 1.0
         };
     }

@@ -2317,6 +2317,28 @@ const App: React.FC = () => {
                              setTimeout(() => setToastMsg(null), 1500);
                          }
                     }}
+                    showTerritory={showTerritory}
+                    onToggleTerritory={() => {
+                        const nextState = !showTerritory;
+                        setShowTerritory(nextState);
+                        if (nextState && gameState.appMode === 'review') {
+                            const historySlice = gameState.history.slice(0, gameState.reviewIndex + 1);
+                            const currentItem = gameState.history[gameState.reviewIndex];
+                            const boardToAnalyze = currentItem ? currentItem.board : gameState.board;
+                            // Make sure to determine the correct next player
+                            const playerToAnalyze = currentItem 
+                                ? (currentItem.currentPlayer === 'black' ? 'white' : 'black') 
+                                : gameState.currentPlayer;
+                            
+                            webAiEngine.requestAnalysis(
+                                boardToAnalyze,
+                                playerToAnalyze,
+                                historySlice,
+                                7.5, // Default Komi
+                                settings.gameType
+                            );
+                        }
+                    }}
                 />
            </div>
 
