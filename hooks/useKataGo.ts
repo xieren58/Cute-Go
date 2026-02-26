@@ -14,16 +14,16 @@ export type ExtendedDifficulty = Difficulty | 'Custom';
 
 // --- 辅助计算函数 (导出给 UI 使用) ---
 export const sliderToVisits = (val: number): number => {
-    // 0-50 映射到 1-100 (每格约2 visits)
-    // 50-100 映射到 100-5000 (每格约98 visits)
-    // 这是一个分段线性映射，让低 visits 区间更细腻
-    if (val <= 50) return Math.round(1 + (val / 50) * 99);
-    else return Math.round(100 + ((val - 50) / 50) * 4900);
+  // 0-50 映射到 1-100 (每格约2 visits)
+  // 50-100 映射到 100-5000 (每格约98 visits)
+  // 这是一个分段线性映射，让低 visits 区间更细腻
+  if (val <= 50) return Math.round(1 + (val / 50) * 99);
+  else return Math.round(100 + ((val - 50) / 50) * 4900);
 };
 
 export const visitsToSlider = (visits: number): number => {
-    if (visits <= 100) return Math.min(50, Math.max(0, ((visits - 1) / 99) * 50));
-    else return Math.min(100, Math.max(50, 50 + ((visits - 100) / 4900) * 50));
+  if (visits <= 100) return Math.min(50, Math.max(0, ((visits - 1) / 99) * 50));
+  else return Math.min(100, Math.max(50, 50 + ((visits - 100) / 4900) * 50));
 };
 
 // --- GTP 工具函数 (私有) ---
@@ -57,7 +57,7 @@ export const useKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign }: UseKata
   const [isThinking, setIsThinking] = useState(false);
   const [aiWinRate, setAiWinRate] = useState<number>(50);
   const [isInitializing, setIsInitializing] = useState(true); // 引擎加载状态
-  
+
   // 引用以避免闭包陷阱
   const boardSizeRef = useRef(boardSize);
   const isThinkingRef = useRef(isThinking);
@@ -120,19 +120,34 @@ export const useKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign }: UseKata
     };
 
     const removeListener = api.onResponse(handleAIResponse);
-    api.initAI();
-
-    // 模拟初始化延迟
-    const isFirstRun = !localStorage.getItem('has_run_ai_before');
-    const timer = setTimeout(() => {
-      setIsInitializing(false);
-      localStorage.setItem('has_run_ai_before', 'true');
-    }, isFirstRun ? 15000 : 5000);
+    setIsInitializing(false);
 
     return () => {
       if (removeListener) removeListener();
-      clearTimeout(timer);
     };
+  }, [isElectron, onAiMove, onAiPass, onAiResign]);
+
+  // 主动启动 KataGo
+  const initializeAI = useCallback(() => {
+    if (!isElectron) return;
+    setIsInitializing(true);
+    const api = (window as any).electronAPI;
+    api.initAI();
+
+    const isFirstRun = !localStorage.getItem('has_run_ai_before');
+    setTimeout(() => {
+      setIsInitializing(false);
+      localStorage.setItem('has_run_ai_before', 'true');
+    }, isFirstRun ? 15000 : 5000);
+  }, [isElectron]);
+
+  // 主动终止 KataGo
+  const terminateAI = useCallback(() => {
+    if (!isElectron) return;
+    const api = (window as any).electronAPI;
+    if (api.stopAI) api.stopAI();
+    setIsThinking(false);
+    setIsInitializing(false);
   }, [isElectron]);
 
   // --- 2. 对外暴露的方法 ---
@@ -153,8 +168,8 @@ export const useKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign }: UseKata
 
   // 请求 AI 落子
   const requestAiMove = useCallback((
-    aiColor: Player, 
-    difficulty: ExtendedDifficulty, 
+    aiColor: Player,
+    difficulty: ExtendedDifficulty,
     maxVisits: number,
     resignThreshold?: number
   ) => {
@@ -162,16 +177,16 @@ export const useKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign }: UseKata
     if (isThinkingRef.current) return; // 防止重复请求
 
     setIsThinking(true);
-    
+
     // 计算 Visits
     // We prioritize the explicit maxVisits argument from UI
     let visits = maxVisits;
     if (!visits || visits <= 0) {
-        // Fallback defaults just in case
-        if (difficulty === 'Easy') visits = 10;
-        else if (difficulty === 'Medium') visits = 100;
-        else if (difficulty === 'Hard') visits = 1000;
-        else visits = 100;
+      // Fallback defaults just in case
+      if (difficulty === 'Easy') visits = 10;
+      else if (difficulty === 'Medium') visits = 100;
+      else if (difficulty === 'Hard') visits = 1000;
+      else visits = 100;
     }
 
     sendCommand(`kata-set-param maxVisits ${visits}`);
@@ -179,7 +194,7 @@ export const useKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign }: UseKata
     // if (typeof resignThreshold === 'number') {
     //   sendCommand(`kata-set-param resignThreshold ${resignThreshold}`);
     // }
-    
+
     // 稍微延时发送 genmove 确保参数生效
     setTimeout(() => {
       sendCommand(`genmove ${aiColor}`);
@@ -210,6 +225,8 @@ export const useKataGo = ({ boardSize, onAiMove, onAiPass, onAiResign }: UseKata
     syncHumanMove,
     requestAiMove,
     resetAI,
-    stopThinking
+    stopThinking,
+    initializeAI,
+    terminateAI
   };
 };

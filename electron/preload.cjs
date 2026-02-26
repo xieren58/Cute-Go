@@ -3,8 +3,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   initAI: () => ipcRenderer.send('init-ai'),
+  stopAI: () => ipcRenderer.send('stop-ai'),
   sendCommand: (cmd) => ipcRenderer.send('ai-command', cmd),
-  
+
   // === 修改重点 ===
   // 现在这个函数会返回一个清理函数 removeListener
   onResponse: (callback) => {

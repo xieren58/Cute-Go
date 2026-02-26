@@ -2,20 +2,20 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { GameBoard } from './components/GameBoard';
 import { BoardSize } from './types';
-import { 
-  createBoard,
-  attemptMove, 
-  getAIMove,
-  checkGomokuWin, 
-  calculateScore, 
-  calculateWinRate,
-  serializeGame,
-  deserializeGame, 
-  generateSGF,
-  parseSGF,
-  getBoardHash,
-  cleanBoardWithTerritory, // [New]
-  calculateGomokuWinRate // [New]
+import {
+    createBoard,
+    attemptMove,
+    getAIMove,
+    checkGomokuWin,
+    calculateScore,
+    calculateWinRate,
+    serializeGame,
+    deserializeGame,
+    generateSGF,
+    parseSGF,
+    getBoardHash,
+    cleanBoardWithTerritory, // [New]
+    calculateGomokuWinRate // [New]
 } from './utils/goLogic';
 import { getAIConfig } from './utils/aiConfig';
 import { Settings, User as UserIcon, Trophy, Feather, Egg, Crown, Brain, Cpu, Home, Heart as HeartIcon, Check } from 'lucide-react';
@@ -31,8 +31,8 @@ import { useAudio } from './hooks/useAudio';
 
 // Utils
 import { supabase } from './utils/supabaseClient';
-import { 
-    tapLogin, getTapPlayerId, submitTapTapElo, openTapTapLeaderboard, isTapTapEnv, getAccountInfo, getTapUserInfo, disconnectTap, tapRequirePrivacyAuthorize, tapGetSetting, tapOpenPrivacyContract, tapGetPrivacySetting, tapCreateUserInfoButton 
+import {
+    tapLogin, getTapPlayerId, submitTapTapElo, openTapTapLeaderboard, isTapTapEnv, getAccountInfo, getTapUserInfo, disconnectTap, tapRequirePrivacyAuthorize, tapGetSetting, tapOpenPrivacyContract, tapGetPrivacySetting, tapCreateUserInfoButton
 } from './utils/tapTapBridge';
 import { BoardState, Player, Stone, GameMode, GameType, Difficulty, AchievementDef, UserAchievement, SignalMessage } from './types';
 import { WORKER_URL, DEFAULT_DOWNLOAD_LINK, CURRENT_VERSION } from './utils/constants';
@@ -71,14 +71,14 @@ const App: React.FC = () => {
     const settings = useAppSettings();
     const gameState = useGameState(settings.boardSize);
     const { playSfx, vibrate } = useAudio(settings.musicVolume, settings.hapticEnabled);
-    
+
     // --- Local UI State ---
     const [showMenu, setShowMenu] = useState(false);
     const [showUserPage, setShowUserPage] = useState(false);
     const [showPassModal, setShowPassModal] = useState(false);
-    const [showTutorial, setShowTutorial] = useState(false); 
+    const [showTutorial, setShowTutorial] = useState(false);
     const [showTsumegoList, setShowTsumegoList] = useState(false); // [New] Tsumego Modal
-    const [isThinking, setIsThinking] = useState(false); 
+    const [isThinking, setIsThinking] = useState(false);
     const [useCloud, setUseCloud] = useState(false); // [New] Cloud AI Toggle (Changed default to Local)
     const [toastMsg, setToastMsg] = useState<string | null>(null);
 
@@ -112,9 +112,9 @@ const App: React.FC = () => {
     const [tsumegoCurrentNode, setTsumegoCurrentNode] = useState<SGFNode | null>(null);
     const [tsumegoCollection, setTsumegoCollection] = useState<SGFNode[] | null>(null);
     const [tsumegoSetTitle, setTsumegoSetTitle] = useState<string>("");
-    
+
     const [tsumegoCategories, setTsumegoCategories] = useState<TsumegoCategory[]>([]); // [New]
-    
+
     // Load Manifest
     useEffect(() => {
         fetchProblemManifest().then(data => {
@@ -145,7 +145,7 @@ const App: React.FC = () => {
     const [userProfile, setUserProfile] = useState<{ nickname: string; elo: number } | null>(null);
     const [showLoginModal, setShowLoginModal] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
-    
+
     // Online State
     const [showOnlineMenu, setShowOnlineMenu] = useState(false);
     const [isMatching, setIsMatching] = useState(false);
@@ -163,9 +163,9 @@ const App: React.FC = () => {
     // Import/Export
     const [showImportModal, setShowImportModal] = useState(false);
     const [importKey, setImportKey] = useState('');
-    
+
     // [Fix SGF Export] Track initial setup stones (Handicap/AB/AW)
-    const [initialStones, setInitialStones] = useState<{x: number, y: number, color: Player}[]>([]); 
+    const [initialStones, setInitialStones] = useState<{ x: number, y: number, color: Player }[]>([]);
 
     // About/Update
     const [showAboutModal, setShowAboutModal] = useState(false);
@@ -188,7 +188,7 @@ const App: React.FC = () => {
     const gameTypeRef = useRef(settings.gameType);
     const onlineStatusRef = useRef(onlineStatus);
     const myColorRef = useRef(myColor);
-    
+
     // Sync Refs
     useEffect(() => { boardSizeRef.current = settings.boardSize; }, [settings.boardSize]);
     useEffect(() => { gameTypeRef.current = settings.gameType; }, [settings.gameType]);
@@ -198,6 +198,7 @@ const App: React.FC = () => {
     // Other Refs
     const aiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const aiTurnLock = useRef(false);
+    const pendingEndGameRef = useRef(false); // [New] Waiting for KataGo endgame analysis
     const connectionTimeoutRef = useRef<number | null>(null);
     const matchTimerRef = useRef<number | null>(null);
     const heartbeatRef = useRef<number | null>(null);
@@ -256,10 +257,10 @@ const App: React.FC = () => {
                 expires_in: 3600,
                 token_type: 'bearer'
             });
-            setUserProfile({ 
-                nickname: profile.nickname, 
+            setUserProfile({
+                nickname: profile.nickname,
                 elo: profile.elo_rating,
-                avatar_url: profile.avatar_url 
+                avatar_url: profile.avatar_url
             });
         }
     };
@@ -308,7 +309,7 @@ const App: React.FC = () => {
                     sessionStorage.removeItem(key);
                 }
             }
-        } catch {}
+        } catch { }
         setSession(null);
         setUserProfile(null);
     };
@@ -340,10 +341,10 @@ const App: React.FC = () => {
             tapId = tapRes;
         } else if (tapRes && typeof tapRes === 'object') {
             tapId = tapRes.unionId || tapRes.union_id || tapRes.unionid ||
-                    tapRes.openid || tapRes.openId || tapRes.open_id ||
-                    tapRes.playerId || tapRes.player_id ||
-                    tapRes.user?.unionId || tapRes.user?.openid || tapRes.user?.id;
-            
+                tapRes.openid || tapRes.openId || tapRes.open_id ||
+                tapRes.playerId || tapRes.player_id ||
+                tapRes.user?.unionId || tapRes.user?.openid || tapRes.user?.id;
+
             tapNickname = tapRes.nickName || tapRes.nickname || tapRes.user?.nickName || tapRes.user?.nickname;
             tapAvatar = tapRes.avatarUrl || tapRes.avatar_url || tapRes.user?.avatarUrl || tapRes.user?.avatar_url;
         }
@@ -356,7 +357,7 @@ const App: React.FC = () => {
         }
 
         // 2. High Priority Fallback: OnlineBattleManager (stable playerId)
-        if (!tapId || tapId.length > 50) { 
+        if (!tapId || tapId.length > 50) {
             console.log('[App] No stable ID in login result, fetching playerId via connect()...');
             const stableId = await getTapPlayerId();
             if (stableId) tapId = stableId;
@@ -369,7 +370,7 @@ const App: React.FC = () => {
                 console.log('[App] getAccountInfoSync result:', JSON.stringify(acctInfo));
                 tapId = acctInfo.openid || acctInfo.unionid || acctInfo.playerId;
             }
-            
+
             // If REALLY nothing else, use the OAuth code (temporary session)
             if (!tapId && tapRes && typeof tapRes === 'object' && tapRes.code) {
                 console.warn('[App] Falling back to transient OAuth code. This ID WILL change every login!');
@@ -378,7 +379,7 @@ const App: React.FC = () => {
         }
 
         console.log('[App] Final Identification - tapId:', tapId, 'Nickname:', tapNickname, 'Avatar:', tapAvatar ? 'Yes' : 'No');
-        
+
         if (!tapId) {
             const keys = (tapRes && typeof tapRes === 'object') ? Object.keys(tapRes).join(',') : (typeof tapRes);
             const msg = (tapRes as any)?.errMsg || (tapRes as any)?.message || 'none';
@@ -427,9 +428,9 @@ const App: React.FC = () => {
             if (needsUpdate) {
                 const { data: updatedProfile } = await supabase
                     .from('profiles')
-                    .update({ 
-                        nickname: tapNickname || profile.nickname, 
-                        avatar_url: tapAvatar || profile.avatar_url 
+                    .update({
+                        nickname: tapNickname || profile.nickname,
+                        avatar_url: tapAvatar || profile.avatar_url
                     })
                     .eq('id', profile.id)
                     .select()
@@ -447,8 +448,8 @@ const App: React.FC = () => {
                 expires_in: 3600,
                 token_type: 'bearer'
             });
-            setUserProfile({ 
-                nickname: profile.nickname, 
+            setUserProfile({
+                nickname: profile.nickname,
                 elo: profile.elo_rating,
                 avatar_url: profile.avatar_url // Pass the avatar URL to the profile state
             });
@@ -464,7 +465,7 @@ const App: React.FC = () => {
 
     const handleUpdateNickname = async (newNickname: string) => {
         if (!session?.user?.id) return;
-        
+
         setToastMsg('正在更新昵称...');
         const { data: updated, error } = await supabase
             .from('profiles')
@@ -504,7 +505,7 @@ const App: React.FC = () => {
     };
 
     // --- Achievements ---
-    const { 
+    const {
         newUnlocked, clearNewUnlocked, checkEndGameAchievements, checkMoveAchievements, achievementsList, userAchievements
     } = useAchievements(session?.user?.id);
 
@@ -525,7 +526,7 @@ const App: React.FC = () => {
             setTimeout(() => {
                 if (aiTurnLock.current && !gameState.gameOver) executeMove(x, y, false);
             }, 200);
-        }, 
+        },
         onAiPass: () => handlePass(false),
         onAiResign: () => endGame(settings.userColor, 'AI 认为差距过大，投子认输')
     });
@@ -535,45 +536,63 @@ const App: React.FC = () => {
         boardSize: settings.boardSize,
         onAiMove: (x, y) => {
             setTimeout(() => {
-                 if (aiTurnLock.current && !gameState.gameOver) executeMove(x, y, false);
+                if (aiTurnLock.current && !gameState.gameOver) executeMove(x, y, false);
             }, 200);
         },
         onAiPass: () => handlePass(false),
         onAiResign: () => endGame(settings.userColor, 'AI 认为胜率过低，投子认输'),
-        onAiError: handleAiError
+        onAiError: handleAiError,
+        onAnalysisComplete: (data) => {
+            if (!pendingEndGameRef.current) return;
+            pendingEndGameRef.current = false;
+            console.log('[App] KataGo Endgame Analysis:', data);
+            // Use KataGo lead to determine winner (lead is from black's perspective, already includes komi)
+            const finalBoard = gameState.boardRef.current;
+            const cleanedBoard = data.ownership ? cleanBoardWithTerritory(finalBoard, data.ownership) : finalBoard;
+            const score = calculateScore(cleanedBoard, data.ownership ?? undefined);
+            gameState.setBoard(cleanedBoard);
+            gameState.setFinalScore(score);
+            setShowPassModal(false);
+            // KataGo lead > 0 = black is winning (already accounts for komi)
+            if (data.lead > 0) {
+                endGame('black', "比分: 黑 " + score.black.toFixed(1) + " - 白 " + score.white.toFixed(1) + " (AI判定)");
+            } else {
+                endGame('white', "比分: 白 " + score.white.toFixed(1) + " - 黑 " + score.black.toFixed(1) + " (AI判定)");
+            }
+        }
     });
 
     const cloudAiEngine = useCloudKataGo({
         onAiMove: (x, y) => {
             setTimeout(() => {
-                 if (aiTurnLock.current && !gameState.gameOver) executeMove(x, y, false);
+                if (aiTurnLock.current && !gameState.gameOver) executeMove(x, y, false);
             }, 200);
         },
         onAiPass: () => handlePass(false),
         onAiResign: () => endGame(settings.userColor, 'Cloud AI 认输'),
         onAiError: handleAiError
     });
-    const { 
+    const {
         isThinking: isCloudThinking,
         aiWinRate: cloudWinRate,
         aiLead: cloudLead,
         aiTerritory: cloudTerritory, // Extract territory from cloud engine
         requestCloudAiMove,
-        errorMsg: cloudErrorMsg 
+        errorMsg: cloudErrorMsg
     } = cloudAiEngine;
 
-    const { 
-        isWorkerReady, 
+    const {
+        isWorkerReady,
         isLoading: isWebLoading, // Legacy loading state (internal)
-        isThinking: isWebThinking, 
-        aiWinRate: webWinRate, 
-        stopThinking: stopWebThinking, 
+        isThinking: isWebThinking,
+        aiWinRate: webWinRate,
+        stopThinking: stopWebThinking,
         requestWebAiMove,
         isInitializing: isWebInitializing, // New
         initStatus: webInitStatus, // New
         aiLead: webLead,
         aiTerritory: webTerritory,
-        initializeAI // New
+        initializeAI, requestAnalysis // New
     } = webAiEngine;
 
     const [isFirstRun] = useState(() => !localStorage.getItem('has_run_ai_before'));
@@ -584,21 +603,21 @@ const App: React.FC = () => {
     // Resets AI lock when going to background to prevent stuck state
     useEffect(() => {
         const handleAppVisibility = () => {
-             const visible = !document.hidden;
-             setIsPageVisible(visible);
-             if (!visible) {
-                 // Reset AI lock if we go to background
+            const visible = !document.hidden;
+            setIsPageVisible(visible);
+            if (!visible) {
+                // Reset AI lock if we go to background
                 if (aiTurnLock.current) {
-                     console.log("[App] App hidden, resetting AI lock");
-                     aiTurnLock.current = false;
-                     setIsThinking(false);
-                     stopWebThinking(); // [Fix] Ensure WebAI is also stopped to prevent state mismatch
-                 }
-                 if (aiTimerRef.current) {
-                     clearTimeout(aiTimerRef.current);
-                     aiTimerRef.current = null;
-                 }
-             }
+                    console.log("[App] App hidden, resetting AI lock");
+                    aiTurnLock.current = false;
+                    setIsThinking(false);
+                    stopWebThinking(); // [Fix] Ensure WebAI is also stopped to prevent state mismatch
+                }
+                if (aiTimerRef.current) {
+                    clearTimeout(aiTimerRef.current);
+                    aiTimerRef.current = null;
+                }
+            }
         };
         document.addEventListener("visibilitychange", handleAppVisibility);
         return () => document.removeEventListener("visibilitychange", handleAppVisibility);
@@ -619,7 +638,7 @@ const App: React.FC = () => {
 
     const getBoardHash = (b: typeof gameState.board) => {
         let str = '';
-        for(let r=0; r<b.length; r++) for(let c=0; c<b.length; c++) str += b[r][c] ? (b[r][c]?.color==='black'?'B':'W') : '.';
+        for (let r = 0; r < b.length; r++) for (let c = 0; c < b.length; c++) str += b[r][c] ? (b[r][c]?.color === 'black' ? 'B' : 'W') : '.';
         return str;
     };
 
@@ -627,8 +646,8 @@ const App: React.FC = () => {
     const resetGame = (keepOnline: boolean = false, explicitSize?: number, shouldBroadcast: boolean = true) => {
         const sizeToUse = explicitSize !== undefined ? explicitSize : settings.boardSize;
         if (explicitSize !== undefined) {
-             settings.setBoardSize(sizeToUse);
-             boardSizeRef.current = sizeToUse;
+            settings.setBoardSize(sizeToUse);
+            boardSizeRef.current = sizeToUse;
         }
 
         gameState.setBoard(createBoard(sizeToUse));
@@ -665,10 +684,10 @@ const App: React.FC = () => {
             dataChannelRef.current.send(JSON.stringify({ type: 'RESTART' }));
         }
 
-        if (!keepOnline) { 
+        if (!keepOnline) {
             isManualDisconnect.current = true;
-            cleanupOnline(); 
-            setMyColor(null); 
+            cleanupOnline();
+            setMyColor(null);
         }
     };
 
@@ -677,7 +696,7 @@ const App: React.FC = () => {
         stopWebThinking();
         aiTurnLock.current = false;
         if (aiTimerRef.current) { clearTimeout(aiTimerRef.current); aiTimerRef.current = null; }
-        
+
         settings.setBoardSize(newSettings.boardSize);
         settings.setGameType(newSettings.gameType);
         settings.setDifficulty(newSettings.difficulty);
@@ -701,18 +720,19 @@ const App: React.FC = () => {
         // AI specific init
         if (newSettings.gameMode === 'PvAI') {
             if (isElectronAvailable && newSettings.gameType === 'Go') {
+                electronAiEngine.initializeAI();
                 electronAiEngine.resetAI(newSettings.boardSize, 7.5);
-                 if (newSettings.userColor === 'white') {
-                   setTimeout(() => {
-                        electronAiEngine.requestAiMove('black', newSettings.difficulty, newSettings.maxVisits, getResignThreshold(newSettings.difficulty)); 
-                   }, 0);
+                if (newSettings.userColor === 'white') {
+                    setTimeout(() => {
+                        electronAiEngine.requestAiMove('black', newSettings.difficulty, newSettings.maxVisits, getResignThreshold(newSettings.difficulty));
+                    }, 500); // Give it a bit more time to spawn
                 }
-            } 
+            }
             else if (!isElectronAvailable && newSettings.gameType === 'Go') {
                 // [Lazy Load] Trigger Initialization specific for H5
                 // Check if this difficulty actually NEEDS the model
                 const aiConfig = getAIConfig(newSettings.difficulty);
-                
+
                 if (aiConfig.useModel && !webAiEngine.isWorkerReady && !webAiEngine.isInitializing) {
                     const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
                     if (!isMobile) {
@@ -722,26 +742,26 @@ const App: React.FC = () => {
                         console.log("[App] Mobile: Deferring AI Init to first move.");
                     }
                 } else if (!aiConfig.useModel && !webAiEngine.isWorkerReady && !webAiEngine.isInitializing) {
-                     console.log("[App] Triggering AI Init (Thin config, but loading model for safety)...");
-                     webAiEngine.initializeAI({ needModel: true });
+                    console.log("[App] Triggering AI Init (Thin config, but loading model for safety)...");
+                    webAiEngine.initializeAI({ needModel: true });
                 }
-                    
-                    // AI Move will be requested when init completes? 
-                    // Or we just wait. The logic below checks locks.
-                    // If we need AI to move FIRST (White), logic is usually in useEffect or manual trigger.
-                    // For now, Init -> App waits.
-                    // If user is White, AI should move. But AI is not ready. 
-                    // We need a way to auto-start AI move after Init. 
-                    // (Adding simple effect for this or trusting user to wait).
-                    // Actually, if user is White, we need to trigger AI move once ready.
-                    // Let's handle that in the `useEffect` that watches `isWorkerReady`.
-                }
-                
-                // If AI is already ready, and user is White, trigger Logic?
-                if (webAiEngine.isWorkerReady && newSettings.userColor === 'white') {
-                    // Logic handled in AI Trigger Effect
-                }
+
+                // AI Move will be requested when init completes? 
+                // Or we just wait. The logic below checks locks.
+                // If we need AI to move FIRST (White), logic is usually in useEffect or manual trigger.
+                // For now, Init -> App waits.
+                // If user is White, AI should move. But AI is not ready. 
+                // We need a way to auto-start AI move after Init. 
+                // (Adding simple effect for this or trusting user to wait).
+                // Actually, if user is White, we need to trigger AI move once ready.
+                // Let's handle that in the `useEffect` that watches `isWorkerReady`.
             }
+
+            // If AI is already ready, and user is White, trigger Logic?
+            if (webAiEngine.isWorkerReady && newSettings.userColor === 'white') {
+                // Logic handled in AI Trigger Effect
+            }
+        }
     };
 
     // [New] Effect: Auto-trigger Lazy Init on Startup/Settings Change if needed
@@ -749,21 +769,33 @@ const App: React.FC = () => {
     useEffect(() => {
         if (showStartScreen || gameState.appMode !== 'playing') return; // [Fix] Defer AI load
 
+        if (settings.gameMode !== 'PvAI') {
+            console.log("[App] Non-AI Mode detected: Terminating AI engines to save power.");
+            if (isElectronAvailable) {
+                electronAiEngine.terminateAI();
+            } else {
+                webAiEngine.terminateAI();
+            }
+            return;
+        }
+
         const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-        
-        if (isMobile && settings.gameMode !== 'PvAI') {
-            console.log("[App] Mobile detected (Non-AI Mode): Skipping Auto-Init.");
+
+        // Ensure Electron AI is started
+        if (isElectronAvailable && settings.gameType === 'Go') {
+            console.log("[App] Auto-triggering Electron AI Init...");
+            electronAiEngine.initializeAI();
             return;
         }
 
         // [Fix] Auto-trigger Local AI for Easy mode even if Cloud is enabled (since Cloud Easy now redirects to Local)
-        if (!isElectronAvailable && settings.gameMode === 'PvAI' && (!useCloud || settings.difficulty === 'Easy') && settings.gameType === 'Go') {
-             const aiConfig = getAIConfig(settings.difficulty);
-             if (!webAiEngine.isWorkerReady && !webAiEngine.isInitializing) {
-                 const needModel = aiConfig.useModel;
-                 console.log(`[App] Auto-triggering AI Init (Playing Mode, needModel=${needModel})...`);
-                 webAiEngine.initializeAI({ needModel });
-             }
+        if (!isElectronAvailable && (!useCloud || settings.difficulty === 'Easy') && settings.gameType === 'Go') {
+            const aiConfig = getAIConfig(settings.difficulty);
+            if (!webAiEngine.isWorkerReady && !webAiEngine.isInitializing) {
+                const needModel = aiConfig.useModel;
+                console.log(`[App] Auto-triggering AI Init (Playing Mode, needModel=${needModel})...`);
+                webAiEngine.initializeAI({ needModel });
+            }
         }
     }, [settings.gameMode, settings.difficulty, isElectronAvailable, webAiEngine.isWorkerReady, webAiEngine.isInitializing, showStartScreen, useCloud, gameState.appMode]);
 
@@ -771,45 +803,53 @@ const App: React.FC = () => {
     const handleStartGame = (mode: 'PvP' | 'PvAI', aiType?: 'cloud' | 'local') => {
         console.log('[handleStartGame] Called with mode:', mode, 'aiType:', aiType);
         console.log('[handleStartGame] Before: showStartScreen =', showStartScreen);
-        
+
         // [FIX] Hide StartScreen FIRST to prevent UI blocking
         setShowStartScreen(false);
-        
+
         settings.setGameMode(mode);
-        
+
         // Reset Logic
         resetGame(false, undefined, false);
 
         if (mode === 'PvAI') {
-             if (aiType === 'cloud') {
-                 setUseCloud(true);
-                 // [Fix] If Easy, we use Local AI, so we must init it.
-                 if (settings.difficulty === 'Easy' && !isElectronAvailable) {
-                      const aiConfigLocal = getAIConfig(settings.difficulty);
-                      if (!webAiEngine.isWorkerReady && !webAiEngine.isInitializing) {
-                          const needModel = aiConfigLocal.useModel && settings.gameType === 'Go';
-                          console.log(`[handleStartGame] Initializing Local AI for Cloud-Easy override...`);
-                          webAiEngine.initializeAI({ needModel });
-                      }
-                 }
-             } else {
-                 setUseCloud(false);
-                 // Auto Init Lazy AI if needed
-                 if (!isElectronAvailable) {
-                     const aiConfigLocal = getAIConfig(settings.difficulty);
-                     if (!webAiEngine.isWorkerReady && !webAiEngine.isInitializing) {
-                         const needModel = aiConfigLocal.useModel;
-                         console.log(`[handleStartGame] Initializing AI (needModel=${needModel})...`);
-                         webAiEngine.initializeAI({ needModel });
-                     }
-                 }
-             }
-             // Ensure User Color is respected or defaulted? 
-             // Logic in resetGame uses defaults.
+            if (aiType === 'cloud') {
+                setUseCloud(true);
+                // [Fix] If Easy, we use Local AI, so we must init it.
+                if (settings.difficulty === 'Easy' && !isElectronAvailable) {
+                    const aiConfigLocal = getAIConfig(settings.difficulty);
+                    if (!webAiEngine.isWorkerReady && !webAiEngine.isInitializing) {
+                        const needModel = aiConfigLocal.useModel && settings.gameType === 'Go';
+                        console.log(`[handleStartGame] Initializing Local AI for Cloud-Easy override...`);
+                        webAiEngine.initializeAI({ needModel });
+                    }
+                }
+            } else {
+                setUseCloud(false);
+                // Auto Init Lazy AI if needed
+                if (isElectronAvailable) {
+                    console.log(`[handleStartGame] Initializing Electron AI...`);
+                    electronAiEngine.initializeAI();
+                } else {
+                    const aiConfigLocal = getAIConfig(settings.difficulty);
+                    if (!webAiEngine.isWorkerReady && !webAiEngine.isInitializing) {
+                        const needModel = aiConfigLocal.useModel;
+                        console.log(`[handleStartGame] Initializing AI (needModel=${needModel})...`);
+                        webAiEngine.initializeAI({ needModel });
+                    }
+                }
+            }
+            // Ensure User Color is respected or defaulted? 
+            // Logic in resetGame uses defaults.
         } else {
-             setUseCloud(false); // irrelevant for PvP but keep clean
+            setUseCloud(false); // irrelevant for PvP but keep clean
+            if (isElectronAvailable) {
+                electronAiEngine.terminateAI();
+            } else {
+                webAiEngine.terminateAI();
+            }
         }
-        
+
         console.log('[handleStartGame] showStartScreen set to false');
         vibrate(20);
     };
@@ -825,19 +865,19 @@ const App: React.FC = () => {
 
     const handleSelectTsumegoSet = async (set: TsumegoSet) => {
         setToastMsg(`正在加载 ${set.title}...`);
-        
+
         try {
             if (!set.filename) throw new Error("Filename is missing");
 
             const url = `/Tsumego/${set.filename}`;
             console.log(`[Tsumego] Fetching ${url}`);
-            
+
             const res = await fetch(url);
             if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
-            
+
             // Direct Text Load for SGF
             const text = await res.text();
-            
+
             // Parse
             const roots = parseSGFToTree(text);
             if (roots.length > 0) {
@@ -857,33 +897,33 @@ const App: React.FC = () => {
     };
 
     const startTsumego = (root: SGFNode) => {
-        resetGame(false, 19, false); 
-        
-        
+        resetGame(false, 19, false);
+
+
         let currentNode: SGFNode = root;
         let combinedProps: { [key: string]: string[] } = { ...root.properties };
-        
+
         // Accumulate Setup from sequence of nodes until a Move node occurs
         let depth = 0;
         while (depth < 10 && !currentNode.properties['B'] && !currentNode.properties['W'] && currentNode.children.length === 1) {
-             const child = currentNode.children[0];
-             
-             if (child.properties['AB']) {
-                 combinedProps['AB'] = [...(combinedProps['AB'] || []), ...child.properties['AB']];
-             }
-             if (child.properties['AW']) {
-                 combinedProps['AW'] = [...(combinedProps['AW'] || []), ...child.properties['AW']];
-             }
-             if (child.properties['SZ']) combinedProps['SZ'] = child.properties['SZ'];
-             if (child.properties['PL']) combinedProps['PL'] = child.properties['PL'];
-             if (child.properties['C']) combinedProps['C'] = child.properties['C'];
-             
-             if (child.properties['B'] || child.properties['W']) {
-                 break; // Child is a move, stop accumulation
-             } else {
-                 currentNode = child; // Advance
-             }
-             depth++;
+            const child = currentNode.children[0];
+
+            if (child.properties['AB']) {
+                combinedProps['AB'] = [...(combinedProps['AB'] || []), ...child.properties['AB']];
+            }
+            if (child.properties['AW']) {
+                combinedProps['AW'] = [...(combinedProps['AW'] || []), ...child.properties['AW']];
+            }
+            if (child.properties['SZ']) combinedProps['SZ'] = child.properties['SZ'];
+            if (child.properties['PL']) combinedProps['PL'] = child.properties['PL'];
+            if (child.properties['C']) combinedProps['C'] = child.properties['C'];
+
+            if (child.properties['B'] || child.properties['W']) {
+                break; // Child is a move, stop accumulation
+            } else {
+                currentNode = child; // Advance
+            }
+            depth++;
         }
 
         // --- Apply Size ---
@@ -892,9 +932,9 @@ const App: React.FC = () => {
             size = parseInt(combinedProps['SZ'][0]);
         }
         if (size !== settings.boardSize) {
-             settings.setBoardSize(size as BoardSize);
-             boardSizeRef.current = size as BoardSize;
-             gameState.setBoard(createBoard(size as BoardSize));
+            settings.setBoardSize(size as BoardSize);
+            boardSizeRef.current = size as BoardSize;
+            gameState.setBoard(createBoard(size as BoardSize));
         }
 
         settings.setGameMode('Tsumego');
@@ -903,14 +943,14 @@ const App: React.FC = () => {
         setTsumegoCurrentNode(currentNode); // Set effective start node
 
         // --- Helper: Parse Point or Range ---
-        const parseSGFPointOrRange = (val: string): {x: number, y: number}[] => {
+        const parseSGFPointOrRange = (val: string): { x: number, y: number }[] => {
             if (val.length < 2) return [];
-            
+
             // Handle compressed range "aa:cc"
             if (val.includes(':')) {
                 const parts = val.split(':');
                 if (parts.length !== 2) return [];
-                
+
                 const p1 = parts[0];
                 const p2 = parts[1];
                 if (p1.length < 2 || p2.length < 2) return [];
@@ -928,7 +968,7 @@ const App: React.FC = () => {
                 const points = [];
                 for (let ix = minX; ix <= maxX; ix++) {
                     for (let iy = minY; iy <= maxY; iy++) {
-                        points.push({x: ix, y: iy});
+                        points.push({ x: ix, y: iy });
                     }
                 }
                 return points;
@@ -936,13 +976,13 @@ const App: React.FC = () => {
                 // Single point
                 const x = val.charCodeAt(0) - 97;
                 const y = val.charCodeAt(1) - 97;
-                return [{x, y}];
+                return [{ x, y }];
             }
         };
 
         // --- Apply Stones ---
         const newBoard = createBoard(size as BoardSize);
-        
+
         if (combinedProps['AB']) {
             combinedProps['AB'].forEach(val => {
                 const points = parseSGFPointOrRange(val);
@@ -954,11 +994,11 @@ const App: React.FC = () => {
             });
         }
         if (combinedProps['AW']) {
-             combinedProps['AW'].forEach(val => {
+            combinedProps['AW'].forEach(val => {
                 const points = parseSGFPointOrRange(val);
                 points.forEach(p => {
                     if (p.x >= 0 && p.x < size && p.y >= 0 && p.y < size) {
-                         newBoard[p.y][p.x] = { color: 'white', x: p.x, y: p.y, id: `setup-w-${p.x}-${p.y}` };
+                        newBoard[p.y][p.x] = { color: 'white', x: p.x, y: p.y, id: `setup-w-${p.x}-${p.y}` };
                     }
                 });
             });
@@ -973,28 +1013,28 @@ const App: React.FC = () => {
                 });
             });
         }
-        
+
         gameState.setBoard(newBoard);
         gameState.boardRef.current = newBoard;
-        
+
         // --- Determine Turn ---
         let firstPlayer: Player = 'black';
         if (combinedProps['PL']) {
-             const pl = combinedProps['PL'][0];
-             firstPlayer = (pl.toLowerCase() === 'w' || pl === '2') ? 'white' : 'black';
+            const pl = combinedProps['PL'][0];
+            firstPlayer = (pl.toLowerCase() === 'w' || pl === '2') ? 'white' : 'black';
         } else if (currentNode.children.length > 0) {
-             // Auto-detect based on first move color
-             const firstChild = currentNode.children[0];
-             if (firstChild.properties['W'] && !firstChild.properties['B']) {
-                 firstPlayer = 'white';
-             } else if (firstChild.properties['B']) {
-                 firstPlayer = 'black';
-             }
+            // Auto-detect based on first move color
+            const firstChild = currentNode.children[0];
+            if (firstChild.properties['W'] && !firstChild.properties['B']) {
+                firstPlayer = 'white';
+            } else if (firstChild.properties['B']) {
+                firstPlayer = 'black';
+            }
         }
-        
+
         gameState.setCurrentPlayer(firstPlayer);
         gameState.currentPlayerRef.current = firstPlayer;
-        settings.setUserColor(firstPlayer); 
+        settings.setUserColor(firstPlayer);
 
         // Show Comment & Player Info
         const turnMsg = firstPlayer === 'black' ? "执黑 (Black to Play)" : "执白 (White to Play)";
@@ -1003,7 +1043,7 @@ const App: React.FC = () => {
             fullMsg += `\n${combinedProps['C'][0]}`;
         }
         setTsumegoInstruction(fullMsg);
-        
+
         // Clear previous result modal
         setShowTsumegoResult(false);
     };
@@ -1012,51 +1052,51 @@ const App: React.FC = () => {
         if (!currentTsumegoLevel) return;
         const cat = tsumegoCategories.find(c => c.id === currentTsumegoLevel.category);
         if (!cat) return;
-        
+
         let fileList: string[] = [];
         const currentFilename = currentTsumegoLevel.filename.replace(/\\/g, '/');
-        
+
         if (currentTsumegoLevel.groupName) {
             const group = cat.children.find(c => (c as any).isGroup && c.name === currentTsumegoLevel.groupName);
             if (group && (group as any).files) {
-                 fileList = (group as any).files;
+                fileList = (group as any).files;
             }
         } else {
-             fileList = cat.children.filter(c => !(c as any).isGroup).map(c => (c as any).file);
+            fileList = cat.children.filter(c => !(c as any).isGroup).map(c => (c as any).file);
         }
 
-        const cleanCurrent = currentFilename.startsWith(cat.dirName + '/') 
-            ? currentFilename.slice(cat.dirName.length + 1) 
+        const cleanCurrent = currentFilename.startsWith(cat.dirName + '/')
+            ? currentFilename.slice(cat.dirName.length + 1)
             : currentFilename;
 
         const idx = fileList.indexOf(cleanCurrent);
-        
+
         if (idx !== -1 && idx < fileList.length - 1) {
-             const nextFile = fileList[idx + 1];
-             const nextFull = `${cat.dirName}/${nextFile}`;
-             const nextLevel: TsumegoLevel = {
-                 id: `${cat.id}/${nextFile}`,
-                 title: `Problem ${idx + 2}`,
-                 category: cat.id,
-                 groupName: currentTsumegoLevel.groupName, // Preserve group
-                 filename: nextFull,
-                 difficulty: 1,
-             };
-             
-             try {
+            const nextFile = fileList[idx + 1];
+            const nextFull = `${cat.dirName}/${nextFile}`;
+            const nextLevel: TsumegoLevel = {
+                id: `${cat.id}/${nextFile}`,
+                title: `Problem ${idx + 2}`,
+                category: cat.id,
+                groupName: currentTsumegoLevel.groupName, // Preserve group
+                filename: nextFull,
+                difficulty: 1,
+            };
+
+            try {
                 setToastMsg("加载下一关...");
                 const sgf = await fetchProblemSGF(nextLevel.filename);
                 setCurrentTsumegoLevel(nextLevel);
                 // setTsumegoLives(99); // Infinite lives
-                
+
                 const nodes = parseSGFToTree(sgf);
                 if (nodes && nodes.length > 0) startTsumego(nodes[0]);
                 setToastMsg(null);
-            } catch(e) {
+            } catch (e) {
                 setToastMsg("加载失败");
             }
         } else {
-             setToastMsg("本章已完成！");
+            setToastMsg("本章已完成！");
         }
     };
 
@@ -1075,17 +1115,17 @@ const App: React.FC = () => {
         const comment = node.properties['C'] ? node.properties['C'][0].toLowerCase() : '';
         const isCorrect = tsumegoKeywords.correct.some(k => comment.includes(k));
         const isWrong = tsumegoKeywords.wrong.some(k => comment.includes(k));
-        
+
         if (isCorrect && !isWrong) return true;
         if (isWrong) return false;
-        
+
         // Recursive check
         return node.children.some(child => hasSuccessDescendant(child));
     };
 
     const checkTsumegoStatus = (node: SGFNode | null) => {
         if (!node) return;
-        
+
         const comment = node.properties['C'] ? node.properties['C'][0] : '';
         if (!comment) return;
 
@@ -1096,22 +1136,22 @@ const App: React.FC = () => {
         const isWrong = tsumegoKeywords.wrong.some(k => comment.toLowerCase().includes(k));
 
         if (isCorrect && !isWrong) {
-             if (node.children.length > 0) {
-                 // Has follow-up (opponent moves), so don't end yet.
-                 setToastMsg(`✅ ${comment} (继续落子...)`);
-             } else {
-                 setToastMsg(`✅ ${comment}`);
-                 setTimeout(() => {
-                     setTsumegoIsCorrect(true);
-                     setTsumegoResultMsg(comment);
-                     setShowTsumegoResult(true);
-                 }, 200);
-             }
+            if (node.children.length > 0) {
+                // Has follow-up (opponent moves), so don't end yet.
+                setToastMsg(`✅ ${comment} (继续落子...)`);
+            } else {
+                setToastMsg(`✅ ${comment}`);
+                setTimeout(() => {
+                    setTsumegoIsCorrect(true);
+                    setTsumegoResultMsg(comment);
+                    setShowTsumegoResult(true);
+                }, 200);
+            }
         } else if (isWrong) {
-             // User requested to remove red 'X' prompt
-             setToastMsg(`${comment}`);
+            // User requested to remove red 'X' prompt
+            setToastMsg(`${comment}`);
         } else {
-             setToastMsg(comment);
+            setToastMsg(comment);
         }
     };
 
@@ -1120,7 +1160,7 @@ const App: React.FC = () => {
 
         const playerProp = gameState.currentPlayer === 'black' ? 'B' : 'W';
         const coordStr = String.fromCharCode(x + 97) + String.fromCharCode(y + 97);
-        
+
         const nextNode = tsumegoCurrentNode.children.find((child: SGFNode) => {
             const prop = child.properties[playerProp];
             // [Robustness] Trim space, just in case 'B[aa ]'
@@ -1129,46 +1169,46 @@ const App: React.FC = () => {
 
         if (nextNode) {
             setTsumegoCurrentNode(nextNode);
-            
+
             // User Move Status
             checkTsumegoStatus(nextNode);
 
             // Trigger Opponent Response
             if (nextNode.children.length > 0 && !showTsumegoResult) {
-                 setTimeout(() => {
-                     // Check again if game ended
-                     
-                     const opponentNode = nextNode.children[0]; 
-                     const oppColor = gameState.currentPlayer === 'black' ? 'white' : 'black';
-                     const oppProp = oppColor === 'black' ? 'B' : 'W';
-                     
-                     if (opponentNode.properties[oppProp]) {
-                         const moveStr = opponentNode.properties[oppProp][0].trim();
-                         if (moveStr && moveStr.length >= 2) { // Allow 'tt'(pass) or 'aa'
-                             const ox = moveStr.charCodeAt(0) - 97;
-                             const oy = moveStr.charCodeAt(1) - 97;
-                             
-                             // Use REF to get latest board state!
-                             const currentBoard = gameState.boardRef.current;
-                             const attempt = attemptMove(currentBoard, ox, oy, oppColor);
-                             
-                             if (attempt) {
-                                  gameState.setBoard(attempt.newBoard);
-                                  gameState.setLastMove({x: ox, y: oy});
-                                  gameState.setCurrentPlayer(oppColor === 'black' ? 'white' : 'black');
-                                  
-                                  if (oppColor === 'black') gameState.setWhiteCaptures(c => c + attempt.captured);
-                                  else gameState.setBlackCaptures(c => c + attempt.captured);
-                                  
-                                  if (attempt.captured > 0) playSfx('capture');
-                                  else playSfx('place');
-                                  
-                                  setTsumegoCurrentNode(opponentNode);
-                                  checkTsumegoStatus(opponentNode);
-                             }
-                         }
-                     }
-                 }, 100);
+                setTimeout(() => {
+                    // Check again if game ended
+
+                    const opponentNode = nextNode.children[0];
+                    const oppColor = gameState.currentPlayer === 'black' ? 'white' : 'black';
+                    const oppProp = oppColor === 'black' ? 'B' : 'W';
+
+                    if (opponentNode.properties[oppProp]) {
+                        const moveStr = opponentNode.properties[oppProp][0].trim();
+                        if (moveStr && moveStr.length >= 2) { // Allow 'tt'(pass) or 'aa'
+                            const ox = moveStr.charCodeAt(0) - 97;
+                            const oy = moveStr.charCodeAt(1) - 97;
+
+                            // Use REF to get latest board state!
+                            const currentBoard = gameState.boardRef.current;
+                            const attempt = attemptMove(currentBoard, ox, oy, oppColor);
+
+                            if (attempt) {
+                                gameState.setBoard(attempt.newBoard);
+                                gameState.setLastMove({ x: ox, y: oy });
+                                gameState.setCurrentPlayer(oppColor === 'black' ? 'white' : 'black');
+
+                                if (oppColor === 'black') gameState.setWhiteCaptures(c => c + attempt.captured);
+                                else gameState.setBlackCaptures(c => c + attempt.captured);
+
+                                if (attempt.captured > 0) playSfx('capture');
+                                else playSfx('place');
+
+                                setTsumegoCurrentNode(opponentNode);
+                                checkTsumegoStatus(opponentNode);
+                            }
+                        }
+                    }
+                }, 100);
             }
             return true;
         } else {
@@ -1201,12 +1241,12 @@ const App: React.FC = () => {
         if (useCloud && cloudWinRate !== 50) {
             return (aiColor === 'white') ? (100 - cloudWinRate) : cloudWinRate;
         }
-        
+
         // Priority 2: Electron AI
         if (isElectronAvailable && electronWinRate !== 50) {
             return (aiColor === 'white') ? (100 - electronWinRate) : electronWinRate;
-        } 
-        
+        }
+
         // Priority 3: Web Worker AI
         if (!isElectronAvailable && isWorkerReady && settings.gameMode === 'PvAI' && webWinRate !== 50) {
             return (aiColor === 'white') ? (100 - webWinRate) : webWinRate;
@@ -1236,7 +1276,7 @@ const App: React.FC = () => {
         // [Optimized] Only calculate if enabled and in valid mode
         if (settings.gameType !== 'Go' && (gameState.appMode !== 'review' || settings.gameType !== 'Go')) return null;
         const aiColor = settings.userColor === 'black' ? 'white' : 'black';
-        
+
         if (useCloud && cloudTerritory) {
             if (aiColor === 'white') {
                 const flipped = new Float32Array(cloudTerritory.length);
@@ -1256,60 +1296,60 @@ const App: React.FC = () => {
     useEffect(() => {
         if (settings.gameMode === 'Tsumego' && tsumegoCurrentNode) {
             if (tsumegoCurrentNode.children.length === 0) {
-                 // Check if it's "Correct" or "Incorrect" based on comments or context
-                 // Simple heuristic: If comment contains positive words or if it's the only path?
-                 // Usually SGF problems have "C[Right]" or "C[Correct]"
-                 // Let's rely on simple presence of comment for now or default to "Ended".
-                 // BUT: If the user just played and there is NO response, it might be correct.
-                 // If the AI just played (which leads to leaf), it means user FAILED (usually).
-                 
-                 // Logic: 
-                 // If currentPlayer is USER's color, it means AI just played and reached end -> User Failed.
-                 // If currentPlayer is OPPONENT, it means USER just played and reached end -> User Solved (probably).
-                 
-                 // Wait, after User moves, we check `tsumegoCurrentNode.children`. If 0, User Solved.
-                 // After AI moves, we check `tsumegoCurrentNode.children`. If 0, AI won -> User Failed.
-                 
-                 const userColor = settings.userColor;
-                 const justPlayedColor = gameState.currentPlayer === 'black' ? 'white' : 'black'; // Previous player
-                 
-                 let isSuccess = false;
-                 
-                 if (justPlayedColor === userColor) {
-                      // User just played the last move.
-                      isSuccess = true;
-                 } else {
-                      // AI just played the last move (refutation).
-                      isSuccess = false; 
-                 }
+                // Check if it's "Correct" or "Incorrect" based on comments or context
+                // Simple heuristic: If comment contains positive words or if it's the only path?
+                // Usually SGF problems have "C[Right]" or "C[Correct]"
+                // Let's rely on simple presence of comment for now or default to "Ended".
+                // BUT: If the user just played and there is NO response, it might be correct.
+                // If the AI just played (which leads to leaf), it means user FAILED (usually).
 
-                 // Override with comments if available
-                 const comment = tsumegoCurrentNode.properties['C'] ? tsumegoCurrentNode.properties['C'][0] : "";
-                 if (comment.toLowerCase().includes("right") || comment.includes("正解") || comment.includes("correct") || comment.includes("win")) isSuccess = true;
-                 if (comment.toLowerCase().includes("wrong") || comment.includes("failure") || comment.includes("失败")) isSuccess = false;
-                 
-                  // Delay slightly to show the move
-                 setTimeout(() => {
-                      setTsumegoIsCorrect(isSuccess);
-                      setTsumegoResultMsg(comment);
-                      setShowTsumegoResult(true);
-                      
-                      if (isSuccess && currentTsumegoLevel) {
-                         // Progression: Mark completed and unlock next
-                           setCompletedLevelIds(prev => {
-                               if (prev.includes(currentTsumegoLevel.id)) return prev;
-                               const next = [...prev, currentTsumegoLevel.id];
-                               localStorage.setItem('completed_tsumego_levels', JSON.stringify(next));
-                               return next;
-                           });
+                // Logic: 
+                // If currentPlayer is USER's color, it means AI just played and reached end -> User Failed.
+                // If currentPlayer is OPPONENT, it means USER just played and reached end -> User Solved (probably).
 
-                           // Unlock logic is now derived from completion history in LevelGrid
-                           // No need to manually update unlockedLevelIds
-                      }
-                      
-                      vibrate(isSuccess ? 100 : 200);
-                      playSfx(isSuccess ? 'win' : 'lose');
-                 }, 200);
+                // Wait, after User moves, we check `tsumegoCurrentNode.children`. If 0, User Solved.
+                // After AI moves, we check `tsumegoCurrentNode.children`. If 0, AI won -> User Failed.
+
+                const userColor = settings.userColor;
+                const justPlayedColor = gameState.currentPlayer === 'black' ? 'white' : 'black'; // Previous player
+
+                let isSuccess = false;
+
+                if (justPlayedColor === userColor) {
+                    // User just played the last move.
+                    isSuccess = true;
+                } else {
+                    // AI just played the last move (refutation).
+                    isSuccess = false;
+                }
+
+                // Override with comments if available
+                const comment = tsumegoCurrentNode.properties['C'] ? tsumegoCurrentNode.properties['C'][0] : "";
+                if (comment.toLowerCase().includes("right") || comment.includes("正解") || comment.includes("correct") || comment.includes("win")) isSuccess = true;
+                if (comment.toLowerCase().includes("wrong") || comment.includes("failure") || comment.includes("失败")) isSuccess = false;
+
+                // Delay slightly to show the move
+                setTimeout(() => {
+                    setTsumegoIsCorrect(isSuccess);
+                    setTsumegoResultMsg(comment);
+                    setShowTsumegoResult(true);
+
+                    if (isSuccess && currentTsumegoLevel) {
+                        // Progression: Mark completed and unlock next
+                        setCompletedLevelIds(prev => {
+                            if (prev.includes(currentTsumegoLevel.id)) return prev;
+                            const next = [...prev, currentTsumegoLevel.id];
+                            localStorage.setItem('completed_tsumego_levels', JSON.stringify(next));
+                            return next;
+                        });
+
+                        // Unlock logic is now derived from completion history in LevelGrid
+                        // No need to manually update unlockedLevelIds
+                    }
+
+                    vibrate(isSuccess ? 100 : 200);
+                    playSfx(isSuccess ? 'win' : 'lose');
+                }, 200);
             }
         }
     }, [tsumegoCurrentNode, settings.gameMode, gameState.currentPlayer, settings.userColor]);
@@ -1322,35 +1362,35 @@ const App: React.FC = () => {
         // 1. It is NOT the user's turn (AI turn).
         // 2. There is a valid move defined in the SGF for the current player.
         if (gameState.currentPlayer !== settings.userColor) {
-             const playerProp = gameState.currentPlayer === 'black' ? 'B' : 'W';
-             
-             // Find response
-             // Heuristic: Take the first child that matches the player color.
-             const nextMove = tsumegoCurrentNode.children.find(c => c.properties[playerProp]);
-             
-             if (nextMove && nextMove.properties[playerProp]) {
-                 const timer = setTimeout(() => {
-                      const moveStr = nextMove.properties[playerProp][0];
-                      if (moveStr && moveStr.length >= 2) {
-                           const x = moveStr.charCodeAt(0) - 97;
-                           const y = moveStr.charCodeAt(1) - 97;
-                           executeMove(x, y, false);
-                           
-                           setTsumegoCurrentNode(nextMove); // Update node pointer
+            const playerProp = gameState.currentPlayer === 'black' ? 'B' : 'W';
 
-                           // Handle Comments on AI move
-                           if (nextMove.properties['C']) {
-                                setToastMsg(nextMove.properties['C'][0]);
-                                setTimeout(() => setToastMsg(null), 3000);
-                           }
-                      }
-                 }, 200);
-                 return () => clearTimeout(timer);
-             }
+            // Find response
+            // Heuristic: Take the first child that matches the player color.
+            const nextMove = tsumegoCurrentNode.children.find(c => c.properties[playerProp]);
+
+            if (nextMove && nextMove.properties[playerProp]) {
+                const timer = setTimeout(() => {
+                    const moveStr = nextMove.properties[playerProp][0];
+                    if (moveStr && moveStr.length >= 2) {
+                        const x = moveStr.charCodeAt(0) - 97;
+                        const y = moveStr.charCodeAt(1) - 97;
+                        executeMove(x, y, false);
+
+                        setTsumegoCurrentNode(nextMove); // Update node pointer
+
+                        // Handle Comments on AI move
+                        if (nextMove.properties['C']) {
+                            setToastMsg(nextMove.properties['C'][0]);
+                            setTimeout(() => setToastMsg(null), 3000);
+                        }
+                    }
+                }, 200);
+                return () => clearTimeout(timer);
+            }
         }
     }, [tsumegoCurrentNode, gameState.currentPlayer, settings.gameMode, settings.userColor, gameState.gameOver]);
 
-    const endGame = useCallback(async (winnerColor: Player, reason: string) => { 
+    const endGame = useCallback(async (winnerColor: Player, reason: string) => {
         gameState.setGameOver(true);
         aiTurnLock.current = false;
         setIsThinking(false);
@@ -1363,20 +1403,20 @@ const App: React.FC = () => {
 
         if (session?.user?.id && (settings.gameMode === 'PvAI' || onlineStatus === 'connected')) {
             const myPlayerColor = onlineStatus === 'connected' ? myColor : settings.userColor;
-            
+
             // [Optimized] AI-Assisted Scoring: Remove Dead Stones
             let finalBoard = gameState.boardRef.current;
             if (settings.gameMode === 'PvAI' && displayTerritory && displayTerritory.length === settings.boardSize * settings.boardSize) {
-                 console.log("[EndGame] Applying AI Dead Stone Removal...");
-                 finalBoard = cleanBoardWithTerritory(finalBoard, displayTerritory);
-                 gameState.setBoard(finalBoard); // Visual Update for user
+                console.log("[EndGame] Applying AI Dead Stone Removal...");
+                finalBoard = cleanBoardWithTerritory(finalBoard, displayTerritory);
+                gameState.setBoard(finalBoard); // Visual Update for user
             }
 
             const currentScore = calculateScore(finalBoard);
             checkEndGameAchievements({
-               winner: winnerColor, myColor: myPlayerColor || 'black', 
-               score: currentScore, captures: { black: gameState.blackCaptures, white: gameState.whiteCaptures },
-               boardSize: settings.boardSize
+                winner: winnerColor, myColor: myPlayerColor || 'black',
+                score: currentScore, captures: { black: gameState.blackCaptures, white: gameState.whiteCaptures },
+                boardSize: settings.boardSize
             });
         }
 
@@ -1394,7 +1434,7 @@ const App: React.FC = () => {
                 const winnerNewElo = calculateElo(userProfile.elo, opponentProfile.elo, 'win');
                 const loserNewElo = calculateElo(opponentProfile.elo, userProfile.elo, 'loss');
                 await supabase.rpc('update_game_elo', { winner_id: session.user.id, loser_id: opponentProfile.id, winner_new_elo: winnerNewElo, loser_new_elo: loserNewElo });
-                
+
                 if (localStorage.getItem('is_taptap_user') === 'true') {
                     submitTapTapElo(winnerNewElo);
                 }
@@ -1406,25 +1446,25 @@ const App: React.FC = () => {
                 }
                 setTimeout(() => fetchProfile(session.user.id), 2000);
             }
-        } 
+        }
         else if (settings.gameMode === 'PvAI' && session && userProfile) {
             const isWin = winnerColor === settings.userColor;
             const resultScore: 0 | 0.5 | 1 = isWin ? 1 : 0;
-            const aiRating = getAiRating(settings.difficulty); 
+            const aiRating = getAiRating(settings.difficulty);
             const newElo = calculateNewRating(userProfile.elo, aiRating, resultScore, 16);
             const eloDiff = newElo - userProfile.elo;
             const diffText = eloDiff > 0 ? `+${eloDiff}` : `${eloDiff}`;
-            
+
             if (isWin && userProfile.elo <= 1200 && aiRating >= 1800) {
-                 gameState.setWinReason(`史诗级胜利！战胜了强敌！ (积分 ${diffText})`);
-                 setEloDiffStyle('gold');
+                gameState.setWinReason(`史诗级胜利！战胜了强敌！ (积分 ${diffText})`);
+                setEloDiffStyle('gold');
             } else {
-                 gameState.setWinReason(`${reason} (积分 ${diffText})`);
-                 setEloDiffStyle(eloDiff > 0 ? 'normal' : 'negative');
+                gameState.setWinReason(`${reason} (积分 ${diffText})`);
+                setEloDiffStyle(eloDiff > 0 ? 'normal' : 'negative');
             }
             setEloDiffText(diffText);
             await supabase.from('profiles').update({ elo_rating: newElo }).eq('id', session.user.id);
-      
+
             if (localStorage.getItem('is_taptap_user') === 'true') {
                 submitTapTapElo(newElo);
             }
@@ -1434,22 +1474,22 @@ const App: React.FC = () => {
     }, [gameState.blackCaptures, gameState.whiteCaptures, settings.boardSize, settings.difficulty, settings.gameMode, settings.userColor, session, userProfile, opponentProfile, myColor, onlineStatus, gameState.setGameOver, gameState.setWinner, gameState.setWinReason, vibrate, playSfx, gameState.boardRef, checkEndGameAchievements, calculateScore, calculateElo, setEloDiffText, setEloDiffStyle, supabase, calculateNewRating, fetchProfile, displayTerritory]);
 
     const executeMove = useCallback((x: number, y: number, isRemote: boolean) => {
-        const currentBoard = gameState.boardRef.current; 
-        const activePlayer = gameState.currentPlayerRef.current; 
+        const currentBoard = gameState.boardRef.current;
+        const activePlayer = gameState.currentPlayerRef.current;
         const currentType = gameTypeRef.current;
-        
+
         let prevHash = null;
         if (gameState.history.length >= 1) {
             prevHash = getBoardHash(gameState.history[gameState.history.length - 1].board);
         }
-        
+
         if (settings.gameMode === 'Tsumego' && !isRemote && tsumegoCurrentNode) {
-             const isValid = handleTsumegoMove(x, y);
-             if (!isValid) return; 
+            const isValid = handleTsumegoMove(x, y);
+            if (!isValid) return;
         }
-        
+
         const result = attemptMove(currentBoard, x, y, activePlayer, currentType, prevHash);
-        
+
         if (result) {
             try {
                 if (result.captured > 0) {
@@ -1459,53 +1499,53 @@ const App: React.FC = () => {
                     playSfx('move');
                     vibrate(15);
                 }
-            } catch(e) {}
+            } catch (e) { }
 
             if (!isRemote && session?.user?.id) {
-               try {
-                   checkMoveAchievements({
-                     x, y, color: activePlayer, moveNumber: gameState.history.length + 1, boardSize: settings.boardSize 
-                   });
-               } catch (achError) { console.warn("Achievement Error:", achError); }
+                try {
+                    checkMoveAchievements({
+                        x, y, color: activePlayer, moveNumber: gameState.history.length + 1, boardSize: settings.boardSize
+                    });
+                } catch (achError) { console.warn("Achievement Error:", achError); }
             }
-            
-            const newHistoryItem = { 
-                board: currentBoard, 
-                currentPlayer: activePlayer, 
-                blackCaptures: gameState.blackCaptures, 
-                whiteCaptures: gameState.whiteCaptures, 
-                lastMove: { x, y }, 
-                consecutivePasses: gameState.consecutivePasses 
+
+            const newHistoryItem = {
+                board: currentBoard,
+                currentPlayer: activePlayer,
+                blackCaptures: gameState.blackCaptures,
+                whiteCaptures: gameState.whiteCaptures,
+                lastMove: { x, y },
+                consecutivePasses: gameState.consecutivePasses
             };
-            
+
             if (!isRemote) {
                 gameState.setHistory(prev => [...prev, newHistoryItem]);
             }
-            
-            gameState.boardRef.current = result.newBoard; 
+
+            gameState.boardRef.current = result.newBoard;
             gameState.historyRef.current = [...gameState.historyRef.current, newHistoryItem];
-            
-            gameState.setBoard(result.newBoard); 
-            gameState.setLastMove({ x, y }); 
-            gameState.setConsecutivePasses(0); 
-            gameState.setPassNotificationDismissed(false); 
-            
-            if (result.captured > 0) { 
-                if (activePlayer === 'black') gameState.setBlackCaptures(prev => prev + result.captured); 
-                else gameState.setWhiteCaptures(prev => prev + result.captured); 
+
+            gameState.setBoard(result.newBoard);
+            gameState.setLastMove({ x, y });
+            gameState.setConsecutivePasses(0);
+            gameState.setPassNotificationDismissed(false);
+
+            if (result.captured > 0) {
+                if (activePlayer === 'black') gameState.setBlackCaptures(prev => prev + result.captured);
+                else gameState.setWhiteCaptures(prev => prev + result.captured);
             }
 
-            if (currentType === 'Gomoku' && checkGomokuWin(result.newBoard, {x, y})) { 
-                setTimeout(() => endGame(activePlayer, '五子连珠！'), 0); 
-                return; 
+            if (currentType === 'Gomoku' && checkGomokuWin(result.newBoard, { x, y })) {
+                setTimeout(() => endGame(activePlayer, '五子连珠！'), 0);
+                return;
             }
-            
+
             const nextPlayer = activePlayer === 'black' ? 'white' : 'black';
             gameState.currentPlayerRef.current = nextPlayer;
             gameState.setCurrentPlayer(nextPlayer);
 
         } else {
-            if (!isRemote) try { playSfx('error'); } catch(e) {}
+            if (!isRemote) try { playSfx('error'); } catch (e) { }
         }
     }, [gameState.history, settings.gameMode, settings.gameType, settings.boardSize, gameState.blackCaptures, gameState.whiteCaptures, gameState.consecutivePasses, handleTsumegoMove, endGame, session?.user?.id, gameState.boardRef, gameState.currentPlayerRef, gameTypeRef, getBoardHash, attemptMove, playSfx, vibrate, checkMoveAchievements, gameState.setHistory, gameState.setBoard, gameState.setLastMove, gameState.setConsecutivePasses, gameState.setPassNotificationDismissed, checkGomokuWin, gameState.setCurrentPlayer, gameState.setBlackCaptures, gameState.setWhiteCaptures]);
 
@@ -1514,7 +1554,7 @@ const App: React.FC = () => {
 
         if (gameState.gameOver) return;
         vibrate(10);
-        
+
         // Fix: Reset AI state if it passed
         if (isRemote) {
             console.log("[App] AI Passed. Unlocking...");
@@ -1527,10 +1567,10 @@ const App: React.FC = () => {
             gameState.setHistory(prev => [...prev, newItem]);
             gameState.historyRef.current = [...gameState.historyRef.current, newItem];
         }
-        
-        if (onlineStatusRef.current === 'connected' && !isRemote) { 
-            if (gameState.currentPlayerRef.current !== myColorRef.current) return; 
-            sendData({ type: 'PASS' }); 
+
+        if (onlineStatusRef.current === 'connected' && !isRemote) {
+            if (gameState.currentPlayerRef.current !== myColorRef.current) return;
+            sendData({ type: 'PASS' });
         }
 
         const isUserPassInPvAI = !isRemote && settings.gameMode === 'PvAI' && settings.gameType === 'Go' && gameState.currentPlayerRef.current === settings.userColor;
@@ -1548,98 +1588,108 @@ const App: React.FC = () => {
         gameState.setConsecutivePasses(prev => {
             const newPasses = prev + 1;
             console.log(`[App] Consecutive Passes: ${prev} -> ${newPasses}`);
-            if (newPasses >= 2) { 
+            if (newPasses >= 2) {
                 console.log("[App] Game End via 2 passes.");
-                setTimeout(() => { 
-                    const score = calculateScore(gameState.boardRef.current); 
-                    gameState.setFinalScore(score); 
-                    setShowPassModal(false); 
-                    if (score.black > score.white) endGame('black', `比分: 黑 ${score.black} - 白 ${score.white}`); 
-                    else endGame('white', `比分: 白 ${score.white} - 黑 ${score.black}`); 
-                }, 0); 
+                // [New] Use KataGo engine for endgame judgment if available in PvAI Go mode
+                if (settings.gameMode === 'PvAI' && settings.gameType === 'Go' && isWorkerReady) {
+                    console.log('[App] Requesting KataGo endgame analysis...');
+                    pendingEndGameRef.current = true;
+                    setShowPassModal(false);
+                    // Analyze from black's perspective so lead > 0 always means black wins
+                    requestAnalysis(gameState.boardRef.current, 'black', gameState.historyRef.current, settings.boardSize === 9 ? 6.5 : 7.5, 'Go');
+                } else {
+                    // Fallback: flood-fill territory counting
+                    setTimeout(() => {
+                        const score = calculateScore(gameState.boardRef.current, displayTerritory);
+                        gameState.setFinalScore(score);
+                        setShowPassModal(false);
+                        if (score.black > score.white) endGame('black', "比分: 黑 " + score.black.toFixed(1) + " - 白 " + score.white.toFixed(1) + " (计算机计分)");
+                        else endGame('white', "比分: 白 " + score.white.toFixed(1) + " - 黑 " + score.black.toFixed(1) + " (计算机计分)");
+                    }, 0);
+                }
             }
             return newPasses;
         });
-        gameState.setPassNotificationDismissed(false); 
-        
+        gameState.setPassNotificationDismissed(false);
+
         // Check using CURRENT state value, not the one just scheduled to update.
         // If consecutivePasses was 0, it means the OTHER player (or previous turn) wasn't a pass.
         // So this is the 1st pass. We should switch turn.
         // If consecutivePasses was 1, it means the previous turn WAS a pass. 
         // This is the 2nd pass. Game ends (handled above).
-        if (gameState.consecutivePasses < 1) { 
-             // [Fix] Use Ref to ensure we switch from the ACTUAL current player. 
-             // (Or just use the closure variable if added to deps, but Ref is safer in async callbacks)
-             const current = gameState.currentPlayerRef.current;
-             const next = current === 'black' ? 'white' : 'black';
-             console.log(`[App] Switching Player: ${current} -> ${next}`);
-             gameState.setCurrentPlayer(next);
-             gameState.currentPlayerRef.current = next;
-             gameState.setLastMove(null); 
+        if (gameState.consecutivePasses < 1) {
+            // [Fix] Use Ref to ensure we switch from the ACTUAL current player. 
+            // (Or just use the closure variable if added to deps, but Ref is safer in async callbacks)
+            const current = gameState.currentPlayerRef.current;
+            const next = current === 'black' ? 'white' : 'black';
+            console.log(`[App] Switching Player: ${current} -> ${next}`);
+            gameState.setCurrentPlayer(next);
+            gameState.currentPlayerRef.current = next;
+            gameState.setLastMove(null);
         }
-    }, [gameState.gameOver, settings.gameMode, settings.gameType, gameState.consecutivePasses, settings.userColor, isElectronAvailable, isElectronThinking, gameState.currentPlayer]);
+    }, [gameState.gameOver, settings.gameMode, settings.gameType, gameState.consecutivePasses, settings.userColor, isElectronAvailable, isElectronThinking, gameState.currentPlayer, displayTerritory, isWorkerReady, requestAnalysis]);
 
     const handleUndo = () => {
-         if (gameState.history.length === 0 || isThinking || gameState.gameOver || onlineStatus === 'connected') return;
-         vibrate(10);
-         let stepsToUndo = 1;
-         
-         const isTsumego = settings.gameMode === 'Tsumego';
+        if (gameState.history.length === 0 || isThinking || gameState.gameOver || onlineStatus === 'connected') return;
+        vibrate(10);
+        let stepsToUndo = 1;
 
-         // In PvAI, if it's user's turn (meaning AI just moved), undo 2 steps (AI + User).
-         // In Tsumego, often we want to undo the AI response + our move if we made a mistake and AI punished.
-         // If Tsumego is active, and the current player is the USER (meaning AI finished its response), we should undo 2 steps?
-         // Or if we just made a move and AI hasn't responded yet (unlikely due to sync?), 1 step.
-         
-         if (settings.gameMode === 'PvAI' && settings.userColor === gameState.currentPlayer && gameState.history.length >= 2) stepsToUndo = 2; 
-         else if (settings.gameMode === 'PvAI' && settings.userColor !== gameState.currentPlayer && gameState.history.length >= 1) stepsToUndo = 1;
-         // Tsumego Undo Logic:
-         else if (isTsumego && gameState.history.length >= 2 && gameState.currentPlayer === settings.userColor) {
-             // If it's my turn again, it means AI probably moved last. Undo 2 steps (My move + AI move).
-             // But wait, if I made a WRONG move, and AI didn't move (toast says "Wrong"), then I'm still the current player (if incorrect move doesn't switch turn? handleTsumegoMove checks `nextNode`).
-             // If `nextNode` is found, `setTsumegoCurrentNode` happens.
-             // `executeMove` is called for AI.
-             
-             // If I made a valid move, AI responds. Turn goes Me -> AI -> Me. So 2 steps.
-             stepsToUndo = 2;
-         } else if (isTsumego) {
-             stepsToUndo = 1;
-         }
+        const isTsumego = settings.gameMode === 'Tsumego';
 
-         // Safety
-         if (gameState.history.length < stepsToUndo) stepsToUndo = gameState.history.length;
+        // In PvAI, if it's user's turn (meaning AI just moved), undo 2 steps (AI + User).
+        // In Tsumego, often we want to undo the AI response + our move if we made a mistake and AI punished.
+        // If Tsumego is active, and the current player is the USER (meaning AI finished its response), we should undo 2 steps?
+        // Or if we just made a move and AI hasn't responded yet (unlikely due to sync?), 1 step.
 
-         const prev = gameState.history[gameState.history.length - stepsToUndo];
-         gameState.setBoard(prev.board); 
-         gameState.setCurrentPlayer(prev.currentPlayer); 
-         gameState.setBlackCaptures(prev.blackCaptures); 
-         gameState.setWhiteCaptures(prev.whiteCaptures); 
-         gameState.setLastMove(prev.lastMove); 
-         gameState.setConsecutivePasses(prev.consecutivePasses); 
-         gameState.setPassNotificationDismissed(false); 
-         
-         // [Fix] Revert Tsumego Node
-         if (isTsumego && tsumegoCurrentNode) {
-             let node = tsumegoCurrentNode;
-             for (let i = 0; i < stepsToUndo; i++) {
-                 if (node.parent) node = node.parent;
-             }
-             setTsumegoCurrentNode(node);
-         }
+        if (settings.gameMode === 'PvAI' && settings.userColor === gameState.currentPlayer && gameState.history.length >= 2) stepsToUndo = 2;
+        else if (settings.gameMode === 'PvAI' && settings.userColor !== gameState.currentPlayer && gameState.history.length >= 1) stepsToUndo = 1;
+        // Tsumego Undo Logic:
+        else if (isTsumego && gameState.history.length >= 2 && gameState.currentPlayer === settings.userColor) {
+            // If it's my turn again, it means AI probably moved last. Undo 2 steps (My move + AI move).
+            // But wait, if I made a WRONG move, and AI didn't move (toast says "Wrong"), then I'm still the current player (if incorrect move doesn't switch turn? handleTsumegoMove checks `nextNode`).
+            // If `nextNode` is found, `setTsumegoCurrentNode` happens.
+            // `executeMove` is called for AI.
 
-         // Reset AI Lock on Undo
-         if (isElectronAvailable && isElectronThinking) electronAiEngine.stopThinking();
-         if (isWebThinking) stopWebThinking(); // [Fix] Abort current calculation
-         aiTurnLock.current = false;
-         setIsThinking(false);
-         if (aiTimerRef.current) { clearTimeout(aiTimerRef.current); aiTimerRef.current = null; }
+            // If I made a valid move, AI responds. Turn goes Me -> AI -> Me. So 2 steps.
+            stepsToUndo = 2;
+        } else if (isTsumego) {
+            stepsToUndo = 1;
+        }
+
+        // Safety
+        if (gameState.history.length < stepsToUndo) stepsToUndo = gameState.history.length;
+
+        const prev = gameState.history[gameState.history.length - stepsToUndo];
+        gameState.setBoard(prev.board);
+        gameState.setCurrentPlayer(prev.currentPlayer);
+        gameState.setBlackCaptures(prev.blackCaptures);
+        gameState.setWhiteCaptures(prev.whiteCaptures);
+        gameState.setLastMove(prev.lastMove);
+        gameState.setConsecutivePasses(prev.consecutivePasses);
+        gameState.setPassNotificationDismissed(false);
+
+        // [Fix] Revert Tsumego Node
+        if (isTsumego && tsumegoCurrentNode) {
+            let node = tsumegoCurrentNode;
+            for (let i = 0; i < stepsToUndo; i++) {
+                if (node.parent) node = node.parent;
+            }
+            setTsumegoCurrentNode(node);
+        }
+
+        // Reset AI Lock on Undo
+        if (isElectronAvailable && isElectronThinking) electronAiEngine.stopThinking();
+        if (isWebThinking) stopWebThinking(); // [Fix] Abort current calculation
+        aiTurnLock.current = false;
+        setIsThinking(false);
+        if (aiTimerRef.current) { clearTimeout(aiTimerRef.current); aiTimerRef.current = null; }
 
 
-         gameState.setHistory(prevHistory => {
-             const newHist = prevHistory.slice(0, prevHistory.length - stepsToUndo);
-             gameState.historyRef.current = newHist; // Sync Ref
-             return newHist;
-         });
+        gameState.setHistory(prevHistory => {
+            const newHist = prevHistory.slice(0, prevHistory.length - stepsToUndo);
+            gameState.historyRef.current = newHist; // Sync Ref
+            return newHist;
+        });
     };
 
 
@@ -1649,78 +1699,78 @@ const App: React.FC = () => {
         if (!isPageVisible || showStartScreen) return;
         if (gameState.appMode !== 'playing' || gameState.gameOver || showPassModal || settings.gameMode !== 'PvAI') return;
         const aiColor = settings.userColor === 'black' ? 'white' : 'black';
-        
-      if (gameState.currentPlayer === aiColor) {
-          if (aiTurnLock.current) return;
-          
-          // [New Fix] Wait for AI to be ready if in Go mode
-          // This prevents "AI requested but not ready" errors and missed moves on startup
-          if (settings.gameType === 'Go' && !useCloud) {
-              if (isElectronAvailable && electronAiEngine.isInitializing) return;
-              // [Modification] Allow falling through even if !isWorkerReady, so requestWebAiMove can trigger Lazy Init
-          }
-          // [Fix] All Go games now use the high-level path (Worker or Electron) for robust Ko handling
-          // Gomoku implementation moved to Worker -> Also High Level.
-          const shouldUseHighLevelAI = true; 
-    
-          if (shouldUseHighLevelAI) {
-              const aiConfig = getAIConfig(settings.difficulty);
-              if (!aiTurnLock.current) {
-                  aiTurnLock.current = true; 
-                  
-                  const isEasyMode = settings.difficulty === 'Easy';
-                  
-                  // Cloud & Electron are GO Only
-                  if (settings.gameType === 'Go' && useCloud && !isEasyMode) {
-                      // Cloud Mode - Optimized for Speed
-                      // Use aiConfig simulations.
-                      // [Fix] Reduce visits to lower difficulty as requested.
-                      let sims = aiConfig.simulations;
-                      
-                      if (isEasyMode) {
-                          sims = 1; // Explicit 1 iteration for Easy + Cloud
-                      } else {
-                          // Medium/Hard
-                          sims = Math.max(8, Math.floor(sims * 1.2)); 
-                          if (sims > 100) sims = 100; // Cap at 100 for Hard
-                      }
-                      
-                      const komi = settings.boardSize === 9 ? 6.5 : 7.5;
-                      requestCloudAiMove(
-                          gameState.boardRef.current,
-                          aiColor,
-                          gameState.historyRef.current,
-                          sims, 
-                          komi
-                      );
-                  }
-                  else if (settings.gameType === 'Go' && isElectronAvailable) {
-                      electronAiEngine.requestAiMove(aiColor, settings.difficulty, settings.maxVisits, getResignThreshold(settings.difficulty));
-                  } else {
-                       // Web AI Request (Go or Gomoku)
-                       let sims = aiConfig.simulations;
-                      
-                       // Safety Check for Mobile? (Already handled in aiConfig)
-                       if (sims < 1) sims = 1;
 
-                       // Determine Komi based on board size
-                       const komi = settings.boardSize === 9 ? 6.5 : 7.5;
-                      
-                       const t = aiConfig.temperature ?? 0;
+        if (gameState.currentPlayer === aiColor) {
+            if (aiTurnLock.current) return;
 
-                       webAiEngine.requestWebAiMove(
-                           gameState.boardRef.current, 
-                           aiColor, 
-                           gameState.historyRef.current, 
-                           sims, 
-                           komi, 
-                           settings.difficulty,
-                           t, // Pass Temperature
-                           settings.gameType as any // [New] Pass Game Type
-                       );
-                  }
-              }
-          }
+            // [New Fix] Wait for AI to be ready if in Go mode
+            // This prevents "AI requested but not ready" errors and missed moves on startup
+            if (settings.gameType === 'Go' && !useCloud) {
+                if (isElectronAvailable && electronAiEngine.isInitializing) return;
+                // [Modification] Allow falling through even if !isWorkerReady, so requestWebAiMove can trigger Lazy Init
+            }
+            // [Fix] All Go games now use the high-level path (Worker or Electron) for robust Ko handling
+            // Gomoku implementation moved to Worker -> Also High Level.
+            const shouldUseHighLevelAI = true;
+
+            if (shouldUseHighLevelAI) {
+                const aiConfig = getAIConfig(settings.difficulty);
+                if (!aiTurnLock.current) {
+                    aiTurnLock.current = true;
+
+                    const isEasyMode = settings.difficulty === 'Easy';
+
+                    // Cloud & Electron are GO Only
+                    if (settings.gameType === 'Go' && useCloud && !isEasyMode) {
+                        // Cloud Mode - Optimized for Speed
+                        // Use aiConfig simulations.
+                        // [Fix] Reduce visits to lower difficulty as requested.
+                        let sims = aiConfig.simulations;
+
+                        if (isEasyMode) {
+                            sims = 1; // Explicit 1 iteration for Easy + Cloud
+                        } else {
+                            // Medium/Hard
+                            sims = Math.max(8, Math.floor(sims * 1.2));
+                            if (sims > 100) sims = 100; // Cap at 100 for Hard
+                        }
+
+                        const komi = settings.boardSize === 9 ? 6.5 : 7.5;
+                        requestCloudAiMove(
+                            gameState.boardRef.current,
+                            aiColor,
+                            gameState.historyRef.current,
+                            sims,
+                            komi
+                        );
+                    }
+                    else if (settings.gameType === 'Go' && isElectronAvailable) {
+                        electronAiEngine.requestAiMove(aiColor, settings.difficulty, settings.maxVisits, getResignThreshold(settings.difficulty));
+                    } else {
+                        // Web AI Request (Go or Gomoku)
+                        let sims = aiConfig.simulations;
+
+                        // Safety Check for Mobile? (Already handled in aiConfig)
+                        if (sims < 1) sims = 1;
+
+                        // Determine Komi based on board size
+                        const komi = settings.boardSize === 9 ? 6.5 : 7.5;
+
+                        const t = aiConfig.temperature ?? 0;
+
+                        webAiEngine.requestWebAiMove(
+                            gameState.boardRef.current,
+                            aiColor,
+                            gameState.historyRef.current,
+                            sims,
+                            komi,
+                            settings.difficulty,
+                            t, // Pass Temperature
+                            settings.gameType as any // [New] Pass Game Type
+                        );
+                    }
+                }
+            }
         } else {
             // User turn, ensure lock is free
             if (gameState.currentPlayer === settings.userColor) aiTurnLock.current = false;
@@ -1732,7 +1782,7 @@ const App: React.FC = () => {
     // --- Online Logic (Simplified & kept in App) ---
     // (Moving full online logic to separate file would be ideal but referencing refs and state setters is tricky)
     // We already moved UI to OnlineMenu. Here we keep the networking logic.
-    
+
     const sendData = (msg: any) => { if (dataChannelRef.current?.readyState === 'open') dataChannelRef.current.send(JSON.stringify(msg)); };
     const cancelMatchmaking = async () => {
         if (matchTimerRef.current) { clearInterval(matchTimerRef.current); matchTimerRef.current = null; }
@@ -1756,30 +1806,30 @@ const App: React.FC = () => {
     const getIceServers = async () => {
         const publicStunServers = ["stun:stun.qq.com:3478", "stun:stun.miwifi.com:3478", "stun:stun.chat.bilibili.com:3478"];
         let turnServers = [];
-        try { const res = await fetch(`${WORKER_URL}/ice-servers`, { method: 'POST' }); const data = await res.json(); if (data && data.iceServers) turnServers = data.iceServers; } catch (e) {}
+        try { const res = await fetch(`${WORKER_URL}/ice-servers`, { method: 'POST' }); const data = await res.json(); if (data && data.iceServers) turnServers = data.iceServers; } catch (e) { }
         return [{ urls: publicStunServers }, ...turnServers];
     };
 
     const setupPeerConnection = async (roomId: string, isHost: boolean, shouldCreateDataChannel: boolean) => {
-          if (pcRef.current) pcRef.current.close();
-          const iceServers = await getIceServers();
-          const pc = new RTCPeerConnection({ iceServers, iceTransportPolicy: 'all', bundlePolicy: 'max-bundle' });
-          pcRef.current = pc;
-          pc.oniceconnectionstatechange = () => {
-              if (pc.iceConnectionState === 'connected') { if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current); } 
-              else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
-                  setOnlineStatus('disconnected');
-                  if (!isManualDisconnect.current) alert("连接异常中断 (对方可能已离开)");
-              }
-          };
-          pc.onicecandidate = (event) => { if (event.candidate) sendSignal(roomId, { type: 'ice', candidate: event.candidate.toJSON() }); };
-          if (shouldCreateDataChannel) { const dc = pc.createDataChannel("game-channel"); setupDataChannel(dc, isHost); } 
-          else { pc.ondatachannel = (event) => setupDataChannel(event.channel, isHost); }
-          return pc;
+        if (pcRef.current) pcRef.current.close();
+        const iceServers = await getIceServers();
+        const pc = new RTCPeerConnection({ iceServers, iceTransportPolicy: 'all', bundlePolicy: 'max-bundle' });
+        pcRef.current = pc;
+        pc.oniceconnectionstatechange = () => {
+            if (pc.iceConnectionState === 'connected') { if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current); }
+            else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+                setOnlineStatus('disconnected');
+                if (!isManualDisconnect.current) alert("连接异常中断 (对方可能已离开)");
+            }
+        };
+        pc.onicecandidate = (event) => { if (event.candidate) sendSignal(roomId, { type: 'ice', candidate: event.candidate.toJSON() }); };
+        if (shouldCreateDataChannel) { const dc = pc.createDataChannel("game-channel"); setupDataChannel(dc, isHost); }
+        else { pc.ondatachannel = (event) => setupDataChannel(event.channel, isHost); }
+        return pc;
     };
-    
+
     const sendSignal = async (roomId: string, payload: SignalMessage) => {
-        try { await supabase.channel(`room_${roomId}`).send({ type: 'broadcast', event: 'signal', payload }); } catch (error) {}
+        try { await supabase.channel(`room_${roomId}`).send({ type: 'broadcast', event: 'signal', payload }); } catch (error) { }
     };
 
     const setupDataChannel = (dc: RTCDataChannel, isHost: boolean) => {
@@ -1788,7 +1838,7 @@ const App: React.FC = () => {
             setOnlineStatus('connected'); setIsMatching(false); setShowOnlineMenu(false); setShowMenu(false); setShowStartScreen(false); settings.setGameMode('PvP');
             if (isHost) {
                 setMyColor('white');
-                resetGame(true, boardSizeRef.current, false); 
+                resetGame(true, boardSizeRef.current, false);
                 const syncPayload: any = { type: 'SYNC', boardSize: boardSizeRef.current, gameType: gameTypeRef.current, startColor: 'black' };
                 if (session && userProfile) syncPayload.opponentInfo = { id: session.user.id, elo: userProfile.elo };
                 dc.send(JSON.stringify(syncPayload));
@@ -1798,10 +1848,10 @@ const App: React.FC = () => {
             const msg = JSON.parse(e.data);
             if (msg.type === 'MOVE') executeMove(msg.x, msg.y, true);
             else if (msg.type === 'PASS') handlePass(true);
-            else if (msg.type === 'SYNC') { 
-                settings.setBoardSize(msg.boardSize); 
+            else if (msg.type === 'SYNC') {
+                settings.setBoardSize(msg.boardSize);
                 boardSizeRef.current = msg.boardSize;
-                settings.setGameType(msg.gameType); 
+                settings.setGameType(msg.gameType);
                 setMyColor(msg.startColor);
                 if (msg.opponentInfo) {
                     setOpponentProfile(msg.opponentInfo);
@@ -1813,8 +1863,8 @@ const App: React.FC = () => {
             else if (msg.type === 'SYNC_REPLY') { if (msg.opponentInfo) setOpponentProfile(msg.opponentInfo); }
             else if (msg.type === 'RESTART') resetGame(true, undefined, false);
         };
-        dc.onclose = () => { 
-            setOnlineStatus('disconnected'); setMyColor(null); 
+        dc.onclose = () => {
+            setOnlineStatus('disconnected'); setMyColor(null);
             if (!isManualDisconnect.current) alert("与对方的连接已断开");
         };
     };
@@ -1831,28 +1881,28 @@ const App: React.FC = () => {
         const myTempPeerId = Math.floor(100000 + Math.random() * 900000).toString();
         setPeerId(myTempPeerId);
         matchTimerRef.current = window.setInterval(() => setMatchTime(prev => prev + 1), 1000);
-        
+
         // ... findOpponent Logic condensed ...
         // (Full logic omitted for brevity in this thought trace but will be in actual output)
         // Re-implementing simplified version:
         const myElo = userProfile.elo;
         try {
             // Mocking finding logic for simplicity here, assuming Supabase calls mostly identical
-             const { data: opponents } = await supabase.from('matchmaking_queue').select('*').eq('game_type', settings.gameType).eq('board_size', sizeToMatch).neq('user_id', session.user.id).limit(1);
-             // ...
-             // Actually, I should just copy the logic.
-             // But wait, the previous code block logic is good. I will reuse it.
-             initMatchmaking(sizeToMatch, myTempPeerId, myElo);
-        } catch(e) { cancelMatchmaking(); }
+            const { data: opponents } = await supabase.from('matchmaking_queue').select('*').eq('game_type', settings.gameType).eq('board_size', sizeToMatch).neq('user_id', session.user.id).limit(1);
+            // ...
+            // Actually, I should just copy the logic.
+            // But wait, the previous code block logic is good. I will reuse it.
+            initMatchmaking(sizeToMatch, myTempPeerId, myElo);
+        } catch (e) { cancelMatchmaking(); }
     };
-    
+
     // Split initMatchmaking to keep cleaner
     const initMatchmaking = async (sizeToMatch: number, myTempPeerId: string, myElo: number) => {
-         const findOpponent = async (attempt: number): Promise<any> => {
-           const range = attempt === 1 ? 100 : (attempt === 2 ? 300 : 9999);
-           const activeSince = new Date(Date.now() - 15000).toISOString();
-           const { data: opponents } = await supabase.from('matchmaking_queue').select('*').eq('game_type', settings.gameType).eq('board_size', sizeToMatch).neq('user_id', session!.user.id).gte('last_seen', activeSince).lte('elo_rating', myElo + range).limit(1);
-           return opponents && opponents.length > 0 ? opponents[0] : null;
+        const findOpponent = async (attempt: number): Promise<any> => {
+            const range = attempt === 1 ? 100 : (attempt === 2 ? 300 : 9999);
+            const activeSince = new Date(Date.now() - 15000).toISOString();
+            const { data: opponents } = await supabase.from('matchmaking_queue').select('*').eq('game_type', settings.gameType).eq('board_size', sizeToMatch).neq('user_id', session!.user.id).gte('last_seen', activeSince).lte('elo_rating', myElo + range).limit(1);
+            return opponents && opponents.length > 0 ? opponents[0] : null;
         };
         let opponent = await findOpponent(1);
         if (!opponent) { await new Promise(r => setTimeout(r, 1000)); opponent = await findOpponent(2); }
@@ -1868,32 +1918,32 @@ const App: React.FC = () => {
                 return;
             }
         }
-        
+
         isManualDisconnect.current = false; cleanupOnline(); setOnlineStatus('connecting');
         const channel = supabase.channel(`room_${myTempPeerId}`);
         channelRef.current = channel;
         channel.on('broadcast', { event: 'signal' }, async ({ payload }: { payload: SignalMessage }) => {
-             const pc = pcRef.current;
-             if (payload.type === 'offer' && payload.sdp) {
-                 supabase.from('matchmaking_queue').delete().eq('peer_id', myTempPeerId).then();
-                 if (matchTimerRef.current) clearInterval(matchTimerRef.current);
-                 if (heartbeatRef.current) clearInterval(heartbeatRef.current); heartbeatRef.current = null;
-                 setIsMatching(false); setOnlineStatus('connecting');
-                 let hostPc = pc;
-                 if (!hostPc) hostPc = await setupPeerConnection(myTempPeerId, true, false);
-                 await hostPc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-                 const answer = await hostPc.createAnswer();
-                 await hostPc.setLocalDescription(answer);
-                 await sendSignal(myTempPeerId, { type: 'answer', sdp: hostPc.localDescription! });
-             }
-             else if (payload.type === 'ice' && payload.candidate && pc) await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
+            const pc = pcRef.current;
+            if (payload.type === 'offer' && payload.sdp) {
+                supabase.from('matchmaking_queue').delete().eq('peer_id', myTempPeerId).then();
+                if (matchTimerRef.current) clearInterval(matchTimerRef.current);
+                if (heartbeatRef.current) clearInterval(heartbeatRef.current); heartbeatRef.current = null;
+                setIsMatching(false); setOnlineStatus('connecting');
+                let hostPc = pc;
+                if (!hostPc) hostPc = await setupPeerConnection(myTempPeerId, true, false);
+                await hostPc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+                const answer = await hostPc.createAnswer();
+                await hostPc.setLocalDescription(answer);
+                await sendSignal(myTempPeerId, { type: 'answer', sdp: hostPc.localDescription! });
+            }
+            else if (payload.type === 'ice' && payload.candidate && pc) await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
         }).subscribe(async (status) => {
-             if (status === 'SUBSCRIBED') {
-                 await supabase.from('matchmaking_queue').insert({ peer_id: myTempPeerId, game_type: settings.gameType, board_size: sizeToMatch, elo_rating: myElo, user_id: session!.user.id, last_seen: new Date().toISOString() });
-                 if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-                 heartbeatRef.current = window.setInterval(async () => { await supabase.from('matchmaking_queue').update({ last_seen: new Date().toISOString() }).eq('peer_id', myTempPeerId); }, 5000);
-                 setOnlineStatus('disconnected'); // Waiting for offer
-             }
+            if (status === 'SUBSCRIBED') {
+                await supabase.from('matchmaking_queue').insert({ peer_id: myTempPeerId, game_type: settings.gameType, board_size: sizeToMatch, elo_rating: myElo, user_id: session!.user.id, last_seen: new Date().toISOString() });
+                if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+                heartbeatRef.current = window.setInterval(async () => { await supabase.from('matchmaking_queue').update({ last_seen: new Date().toISOString() }).eq('peer_id', myTempPeerId); }, 5000);
+                setOnlineStatus('disconnected'); // Waiting for offer
+            }
         });
     };
 
@@ -1903,35 +1953,35 @@ const App: React.FC = () => {
         isManualDisconnect.current = false;
         if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
         cleanupOnline();
-    
+
         // 2. Generate new Room ID
         const id = Math.floor(100000 + Math.random() * 900000).toString();
         setPeerId(id);
-        setIsHostReady(false); 
-    
+        setIsHostReady(false);
+
         // 3. Subscribe to channel and wait for offer
         const channel = supabase.channel(`room_${id}`);
         channelRef.current = channel;
-    
+
         channel.on('broadcast', { event: 'signal' }, async ({ payload }: { payload: SignalMessage }) => {
             let pc = pcRef.current;
-            
+
             // As host, we receive 'offer'
             if (payload.type === 'offer' && payload.sdp) {
                 if (!pc) pc = await setupPeerConnection(id, true, false); // true = I am host
-                
+
                 await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
-                
+
                 // Reply with 'answer'
                 await sendSignal(id, { type: 'answer', sdp: pc.localDescription! });
             }
             else if (payload.type === 'answer' && payload.sdp && pc) {
-                 await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+                await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
             }
             else if (payload.type === 'ice' && payload.candidate && pc) {
-                 await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
+                await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
             }
         }).subscribe(status => {
             if (status === 'SUBSCRIBED') {
@@ -1954,7 +2004,7 @@ const App: React.FC = () => {
         if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
         cleanupOnline();
         setOnlineStatus('connecting');
-        
+
         connectionTimeoutRef.current = window.setTimeout(() => {
             if (onlineStatusRef.current !== 'connected') {
                 isManualDisconnect.current = true; cleanupOnline(); alert("连接超时：房间可能不存在或对方离线"); setOnlineStatus('disconnected');
@@ -1983,29 +2033,29 @@ const App: React.FC = () => {
         // [Debug] Click Logging
         console.log(`[Click] (${x}, ${y}) Mode: ${gameState.appMode}, Current: ${gameState.currentPlayer}, User: ${settings.userColor}, Lock: ${aiTurnLock.current}, Thinking: ${isThinking}`);
 
-        if (gameState.appMode === 'review') return; 
+        if (gameState.appMode === 'review') return;
         if (gameState.appMode === 'setup') {
             const newBoard = gameState.board.map(row => row.map(s => s));
-            if (gameState.setupTool === 'erase') { if (newBoard[y][x]) { newBoard[y][x] = null; playSfx('capture'); vibrate(10); } } 
+            if (gameState.setupTool === 'erase') { if (newBoard[y][x]) { newBoard[y][x] = null; playSfx('capture'); vibrate(10); } }
             else { newBoard[y][x] = { color: gameState.setupTool, x, y, id: `setup-${gameState.setupTool}-${Date.now()}` }; playSfx('move'); vibrate(15); }
             gameState.setBoard(newBoard); return;
         }
-        
+
         if (gameState.gameOver) { console.log("Click ignored: Game Over"); return; }
         if (isThinking) { console.log("Click ignored: AI Thinking"); return; }
-        
+
         const aiColor = settings.userColor === 'black' ? 'white' : 'black';
-        
+
         if (onlineStatus !== 'connected' && settings.gameMode === 'PvAI' && gameState.currentPlayer === aiColor) {
-             console.log("Click ignored: AI Turn", gameState.currentPlayer, aiColor);
-             return;
+            console.log("Click ignored: AI Turn", gameState.currentPlayer, aiColor);
+            return;
         }
 
         if (onlineStatus === 'connected') { if (gameState.currentPlayer !== myColor) return; sendData({ type: 'MOVE', x, y }); }
         if (isElectronAvailable && settings.gameType === 'Go') electronAiEngine.syncHumanMove(gameState.currentPlayer, x, y);
         executeMove(x, y, false);
     }, [gameState.gameOver, settings.gameMode, gameState.currentPlayer, onlineStatus, myColor, isThinking, gameState.appMode, gameState.setupTool, gameState.board, settings.userColor, isElectronAvailable, electronAiEngine, settings.gameType]);
-    
+
     // --- Update Checker ---
     const handleCheckUpdate = async () => {
         setCheckingUpdate(true); setUpdateMsg(''); setNewVersionFound(false);
@@ -2020,60 +2070,60 @@ const App: React.FC = () => {
             }
         } catch (e) { setUpdateMsg('检查失败'); } finally { setCheckingUpdate(false); }
     };
-    
+
 
 
     return (
         <div className="h-full w-full bg-[#f7e7ce] flex flex-col landscape:flex-row items-center relative select-none overflow-y-auto landscape:overflow-hidden text-[#5c4033] pt-safe pb-safe">
-           
-           {toastMsg && (
-               <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[80] bg-[#5c4033] text-[#fcf6ea] px-4 py-2 rounded-full text-xs font-bold shadow-lg border-2 border-[#8c6b38] animate-in fade-in">
-                   {toastMsg}
-               </div>
-           )}
 
-           {showStartScreen && (
-               <StartScreen 
-                   onStartGame={handleStartGame}
-                   onOpenTsumego={() => setShowTsumegoLevelSelector(true)}
-                   onOpenTutorial={() => setShowTutorial(true)}
-                   onOpenOnline={() => setShowOnlineMenu(true)}
-                   onOpenImport={() => setShowImportModal(true)}
-                   onOpenSettings={() => setShowMenu(true)}
-                   onOpenAbout={() => setShowAboutModal(true)}
-                   onStartSetup={() => { 
-                        setShowStartScreen(false); 
+            {toastMsg && (
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[80] bg-[#5c4033] text-[#fcf6ea] px-4 py-2 rounded-full text-xs font-bold shadow-lg border-2 border-[#8c6b38] animate-in fade-in">
+                    {toastMsg}
+                </div>
+            )}
+
+            {showStartScreen && (
+                <StartScreen
+                    onStartGame={handleStartGame}
+                    onOpenTsumego={() => setShowTsumegoLevelSelector(true)}
+                    onOpenTutorial={() => setShowTutorial(true)}
+                    onOpenOnline={() => setShowOnlineMenu(true)}
+                    onOpenImport={() => setShowImportModal(true)}
+                    onOpenSettings={() => setShowMenu(true)}
+                    onOpenAbout={() => setShowAboutModal(true)}
+                    onStartSetup={() => {
+                        setShowStartScreen(false);
                         settings.setGameMode('PvP'); // [Fix] Prevent carrying over Tsumego mode
-                        resetGame(false); 
-                        gameState.setAppMode('setup'); 
+                        resetGame(false);
+                        gameState.setAppMode('setup');
                     }}
-                   onOpenUserPage={() => setShowUserPage(true)}
+                    onOpenUserPage={() => setShowUserPage(true)}
                     onOpenSkinShop={() => setShowSkinShop(true)}
-               />
-           )}
+                />
+            )}
 
-           <AchievementNotification newUnlocked={newUnlocked} clearNewUnlocked={clearNewUnlocked} />
+            <AchievementNotification newUnlocked={newUnlocked} clearNewUnlocked={clearNewUnlocked} />
 
-           {/* --- BOARD AREA --- */}
-           <div className="relative flex-grow h-[60%] landscape:h-full w-full landscape:w-auto landscape:flex-1 flex items-center justify-center p-2 order-2 landscape:order-1 min-h-0 min-w-0">
-               <div className="w-full h-full max-w-full max-h-full aspect-square flex items-center justify-center">
-                   <div 
-                       className="transform transition-transform w-full h-full relative"
-                   >
-                       <GameBoard 
-                           board={gameState.appMode === 'review' && gameState.history[gameState.reviewIndex] ? gameState.history[gameState.reviewIndex].board : gameState.board} 
-                           onIntersectionClick={handleIntersectionClick}
-                           currentPlayer={gameState.currentPlayer}
-                           lastMove={gameState.appMode === 'review' && gameState.history[gameState.reviewIndex] ? gameState.history[gameState.reviewIndex].lastMove : gameState.lastMove}
-                           showQi={settings.showQi}
-                           gameType={settings.gameType}
-                           gameMode={settings.gameMode}
-                           showCoordinates={settings.showCoordinates}
+            {/* --- BOARD AREA --- */}
+            <div className="relative flex-grow h-[60%] landscape:h-full w-full landscape:w-auto landscape:flex-1 flex items-center justify-center p-2 order-2 landscape:order-1 min-h-0 min-w-0">
+                <div className="w-full h-full max-w-full max-h-full aspect-square flex items-center justify-center">
+                    <div
+                        className="transform transition-transform w-full h-full relative"
+                    >
+                        <GameBoard
+                            board={gameState.appMode === 'review' && gameState.history[gameState.reviewIndex] ? gameState.history[gameState.reviewIndex].board : gameState.board}
+                            onIntersectionClick={handleIntersectionClick}
+                            currentPlayer={gameState.currentPlayer}
+                            lastMove={gameState.appMode === 'review' && gameState.history[gameState.reviewIndex] ? gameState.history[gameState.reviewIndex].lastMove : gameState.lastMove}
+                            showQi={settings.showQi}
+                            gameType={settings.gameType}
+                            gameMode={settings.gameMode}
+                            showCoordinates={settings.showCoordinates}
                             territory={displayTerritory}
-                           showTerritory={showTerritory}
-                           stoneSkin={settings.stoneSkin}
-                           boardSkin={settings.boardSkin}
-                           separatePieces={settings.separatePieces}
+                            showTerritory={showTerritory}
+                            stoneSkin={settings.stoneSkin}
+                            boardSkin={settings.boardSkin}
+                            separatePieces={settings.separatePieces}
                         />
                     </div>
                 </div>
@@ -2082,25 +2132,25 @@ const App: React.FC = () => {
                         {webInitStatus ? webInitStatus : (useCloud ? '云端 AI 正在计算...' : (isElectronAvailable ? 'KataGo 正在计算...' : 'AI 正在思考...'))}
                     </div>
                 )}
-               <PassConfirmationModal 
-                   consecutivePasses={gameState.consecutivePasses} 
-                   gameOver={gameState.gameOver} 
-                   passNotificationDismissed={gameState.passNotificationDismissed}
-                   onDismiss={() => {
-                       gameState.setPassNotificationDismissed(true);
-                       // Force unlock state in case AI logic didn't clear it correctly
-                       setIsThinking(false);
-                       stopWebThinking(); // [Fix] Ensure WebAI is also stopped
-                       aiTurnLock.current = false;
-                   }}
-                   onPass={() => handlePass(false)}
-               />
-           </div>
+                <PassConfirmationModal
+                    consecutivePasses={gameState.consecutivePasses}
+                    gameOver={gameState.gameOver}
+                    passNotificationDismissed={gameState.passNotificationDismissed}
+                    onDismiss={() => {
+                        gameState.setPassNotificationDismissed(true);
+                        // Force unlock state in case AI logic didn't clear it correctly
+                        setIsThinking(false);
+                        stopWebThinking(); // [Fix] Ensure WebAI is also stopped
+                        aiTurnLock.current = false;
+                    }}
+                    onPass={() => handlePass(false)}
+                />
+            </div>
 
-           {/* --- SIDEBAR --- */}
-           <div 
+            {/* --- SIDEBAR --- */}
+            <div
                 className="w-full landscape:w-96 flex flex-col gap-4 px-4 pb-4 pt-1 z-20 shrink-0 bg-[#f7e7ce] landscape:bg-[#f2e6d6] landscape:h-full landscape:border-l-4 landscape:border-[#e3c086] order-1 landscape:order-2 shadow-xl landscape:shadow-none"
-           >
+            >
                 <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
                         <button onClick={() => { setShowStartScreen(true); vibrate(10); }} className="btn-retro btn-brown p-3 rounded-xl"><Home size={20} /></button>
@@ -2110,17 +2160,17 @@ const App: React.FC = () => {
 
                     <div className="flex flex-col items-end">
                         <span className="font-black text-[#5c4033] text-xl leading-tight flex items-center gap-2 tracking-wide">
-                        {onlineStatus === 'connected' && (
+                            {onlineStatus === 'connected' && (
                                 <span className="relative flex h-2 w-2">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                                     <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                                 </span>
-                        )}
-                        {gameState.appMode === 'setup' ? '电子挂盘' : gameState.appMode === 'review' ? '复盘模式' : (settings.gameType === 'Go' ? '围棋' : '五子棋')}
+                            )}
+                            {gameState.appMode === 'setup' ? '电子挂盘' : gameState.appMode === 'review' ? '复盘模式' : (settings.gameType === 'Go' ? '围棋' : '五子棋')}
                         </span>
                         {gameState.appMode === 'playing' && (
                             <span className="text-[10px] font-bold text-[#8c6b38] bg-[#e3c086]/30 px-2 py-1 rounded-full border border-[#e3c086] mt-1">
-                                {settings.boardSize}路 • {settings.gameMode === 'PvP' ? '双人' : settings.difficulty} • 
+                                {settings.boardSize}路 • {settings.gameMode === 'PvP' ? '双人' : settings.difficulty} •
                                 <button onClick={() => setUseCloud(!useCloud)} className="hover:underline ml-1">
                                     {onlineStatus === 'connected' ? '在线' : (settings.gameMode === 'PvAI' ? (useCloud ? '云端 AI' : '本地 AI') : '本地')}
                                 </button>
@@ -2129,7 +2179,7 @@ const App: React.FC = () => {
                     </div>
                 </div>
 
-                <ScoreBoard 
+                <ScoreBoard
                     currentPlayer={gameState.currentPlayer}
                     blackCaptures={gameState.blackCaptures}
                     whiteCaptures={gameState.whiteCaptures}
@@ -2143,7 +2193,7 @@ const App: React.FC = () => {
                 />
 
                 {gameState.appMode === 'playing' && settings.gameMode === 'PvAI' && settings.showWinRate && settings.gameType === 'Go' && ( // [Updated] Show Analysis for ALL Go PvAI games
-                    <AnalysisPanel 
+                    <AnalysisPanel
                         winRate={displayWinRate}
                         lead={displayLead}
                         isThinking={showThinkingStatus}
@@ -2153,13 +2203,13 @@ const App: React.FC = () => {
                     />
                 )}
 
-                <GameControls  
+                <GameControls
                     appMode={gameState.appMode}
                     setupTool={gameState.setupTool}
                     setSetupTool={gameState.setSetupTool}
-                    finishSetup={() => { 
-                        gameState.setAppMode('playing'); 
-                        gameState.setHistory([]); 
+                    finishSetup={() => {
+                        gameState.setAppMode('playing');
+                        gameState.setHistory([]);
                         gameState.historyRef.current = [];
                         aiTurnLock.current = false;
                         setIsThinking(false);
@@ -2178,7 +2228,7 @@ const App: React.FC = () => {
                     currentPlayer={gameState.currentPlayer}
                     myColor={myColor}
                     consecutivePasses={gameState.consecutivePasses}
-                    
+
                     // Tsumego Props
                     isTsumego={settings.gameMode === 'Tsumego'}
                     hasPrevProblem={useMemo(() => {
@@ -2193,13 +2243,13 @@ const App: React.FC = () => {
                         } else {
                             fileList = cat.children.filter(c => !(c as any).isGroup).map(c => (c as any).file);
                         }
-                        const cleanCurrent = currentFilename.startsWith(cat.dirName + '/') 
-                            ? currentFilename.slice(cat.dirName.length + 1) 
+                        const cleanCurrent = currentFilename.startsWith(cat.dirName + '/')
+                            ? currentFilename.slice(cat.dirName.length + 1)
                             : currentFilename;
                         const idx = fileList.indexOf(cleanCurrent);
                         return idx > 0;
                     }, [currentTsumegoLevel, tsumegoCategories])}
-                    
+
                     hasNextProblem={useMemo(() => {
                         if (!currentTsumegoLevel) return false;
                         const cat = tsumegoCategories.find(c => c.id === currentTsumegoLevel.category);
@@ -2212,8 +2262,8 @@ const App: React.FC = () => {
                         } else {
                             fileList = cat.children.filter(c => !(c as any).isGroup).map(c => (c as any).file);
                         }
-                        const cleanCurrent = currentFilename.startsWith(cat.dirName + '/') 
-                            ? currentFilename.slice(cat.dirName.length + 1) 
+                        const cleanCurrent = currentFilename.startsWith(cat.dirName + '/')
+                            ? currentFilename.slice(cat.dirName.length + 1)
                             : currentFilename;
                         const idx = fileList.indexOf(cleanCurrent);
                         return idx !== -1 && idx < fileList.length - 1;
@@ -2232,90 +2282,90 @@ const App: React.FC = () => {
                         } else {
                             fileList = cat.children.filter(c => !(c as any).isGroup).map(c => (c as any).file);
                         }
-                        const cleanCurrent = currentFilename.startsWith(cat.dirName + '/') 
-                            ? currentFilename.slice(cat.dirName.length + 1) 
+                        const cleanCurrent = currentFilename.startsWith(cat.dirName + '/')
+                            ? currentFilename.slice(cat.dirName.length + 1)
                             : currentFilename;
                         const idx = fileList.indexOf(cleanCurrent);
-                        
+
                         if (idx > 0) {
-                             const prevFile = fileList[idx - 1];
-                             const prevFull = `${cat.dirName}/${prevFile}`;
-                             const prevLevel: TsumegoLevel = {
-                                 id: `${cat.id}/${prevFile}`,
-                                 title: `Problem ${idx}`, // idx + 1 - 1
-                                 category: cat.id,
-                                 groupName: currentTsumegoLevel.groupName, 
-                                 filename: prevFull,
-                                 difficulty: 1,
-                             };
-                             setToastMsg("加载上一关...");
-                             fetchProblemSGF(prevLevel.filename).then(sgf => {
+                            const prevFile = fileList[idx - 1];
+                            const prevFull = `${cat.dirName}/${prevFile}`;
+                            const prevLevel: TsumegoLevel = {
+                                id: `${cat.id}/${prevFile}`,
+                                title: `Problem ${idx}`, // idx + 1 - 1
+                                category: cat.id,
+                                groupName: currentTsumegoLevel.groupName,
+                                filename: prevFull,
+                                difficulty: 1,
+                            };
+                            setToastMsg("加载上一关...");
+                            fetchProblemSGF(prevLevel.filename).then(sgf => {
                                 setCurrentTsumegoLevel(prevLevel);
                                 const nodes = parseSGFToTree(sgf);
                                 if (nodes && nodes.length > 0) startTsumego(nodes[0]);
                                 setToastMsg(null);
-                             }).catch(() => setToastMsg("加载失败"));
+                            }).catch(() => setToastMsg("加载失败"));
                         }
                     }}
                     handleNextProblem={handleNextTsumego}
                     handleHint={() => {
-                         if (!tsumegoCurrentNode) return;
-                         // Hint Logic
-                         const playerProp = gameState.currentPlayer === 'black' ? 'B' : 'W';
-                         const playerColor = gameState.currentPlayer;
-                         
-                         // 1. First, look for immediate nodes marked "Correct"
-                         let hintChild = tsumegoCurrentNode.children.find(c => {
-                             const comment = c.properties['C'] ? c.properties['C'][0].toLowerCase() : '';
-                             return tsumegoKeywords.correct.some(k => comment.includes(k));
-                         });
-                         
-                         // 2. [New] Recursive Search: Does any branch lead to success?
-                         if (!hintChild) {
-                             hintChild = tsumegoCurrentNode.children.find(c => hasSuccessDescendant(c));
-                         }
+                        if (!tsumegoCurrentNode) return;
+                        // Hint Logic
+                        const playerProp = gameState.currentPlayer === 'black' ? 'B' : 'W';
+                        const playerColor = gameState.currentPlayer;
 
-                         // Fallback Logic:
-                         if (!hintChild) {
-                             // Filter out known "Wrong" paths
-                             const candidates = tsumegoCurrentNode.children.filter(c => {
-                                 if (!c.properties[playerProp]) return false;
-                                 const comment = c.properties['C'] ? c.properties['C'][0].toLowerCase() : '';
-                                 const isWrong = tsumegoKeywords.wrong.some(k => comment.includes(k));
-                                 return !isWrong;
-                             });
-                             
-                             if (candidates.length > 0) {
-                                 hintChild = candidates[0];
-                             } else {
-                                 hintChild = tsumegoCurrentNode.children.find(c => c.properties[playerProp]);
-                             }
-                         }
+                        // 1. First, look for immediate nodes marked "Correct"
+                        let hintChild = tsumegoCurrentNode.children.find(c => {
+                            const comment = c.properties['C'] ? c.properties['C'][0].toLowerCase() : '';
+                            return tsumegoKeywords.correct.some(k => comment.includes(k));
+                        });
 
-                         if (hintChild && hintChild.properties[playerProp]) {
-                             const moveStr = hintChild.properties[playerProp][0];
-                             if (moveStr && moveStr.length >= 2) {
-                                  // Trim strictly to avoid issues
-                                  const trimmed = moveStr.trim();
-                                  const x = trimmed.charCodeAt(0) - 97;
-                                  const y = trimmed.charCodeAt(1) - 97;
-                                  
-                                  // 1. Place Stone (Visual)
-                                  const attempt = attemptMove(gameState.boardRef.current, x, y, playerColor);
-                                  if (attempt) {
-                                      gameState.setBoard(attempt.newBoard);
-                                      gameState.setLastMove({x, y});
-                                      gameState.setCurrentPlayer(playerColor === 'black' ? 'white' : 'black');
-                                      playSfx('place');
-                                      
-                                      // 2. Trigger Tsumego Logic
-                                      handleTsumegoMove(x, y); 
-                                  }
-                             }
-                         } else {
-                             setToastMsg("无更多提示 / 已是最后一步");
-                             setTimeout(() => setToastMsg(null), 1500);
-                         }
+                        // 2. [New] Recursive Search: Does any branch lead to success?
+                        if (!hintChild) {
+                            hintChild = tsumegoCurrentNode.children.find(c => hasSuccessDescendant(c));
+                        }
+
+                        // Fallback Logic:
+                        if (!hintChild) {
+                            // Filter out known "Wrong" paths
+                            const candidates = tsumegoCurrentNode.children.filter(c => {
+                                if (!c.properties[playerProp]) return false;
+                                const comment = c.properties['C'] ? c.properties['C'][0].toLowerCase() : '';
+                                const isWrong = tsumegoKeywords.wrong.some(k => comment.includes(k));
+                                return !isWrong;
+                            });
+
+                            if (candidates.length > 0) {
+                                hintChild = candidates[0];
+                            } else {
+                                hintChild = tsumegoCurrentNode.children.find(c => c.properties[playerProp]);
+                            }
+                        }
+
+                        if (hintChild && hintChild.properties[playerProp]) {
+                            const moveStr = hintChild.properties[playerProp][0];
+                            if (moveStr && moveStr.length >= 2) {
+                                // Trim strictly to avoid issues
+                                const trimmed = moveStr.trim();
+                                const x = trimmed.charCodeAt(0) - 97;
+                                const y = trimmed.charCodeAt(1) - 97;
+
+                                // 1. Place Stone (Visual)
+                                const attempt = attemptMove(gameState.boardRef.current, x, y, playerColor);
+                                if (attempt) {
+                                    gameState.setBoard(attempt.newBoard);
+                                    gameState.setLastMove({ x, y });
+                                    gameState.setCurrentPlayer(playerColor === 'black' ? 'white' : 'black');
+                                    playSfx('place');
+
+                                    // 2. Trigger Tsumego Logic
+                                    handleTsumegoMove(x, y);
+                                }
+                            }
+                        } else {
+                            setToastMsg("无更多提示 / 已是最后一步");
+                            setTimeout(() => setToastMsg(null), 1500);
+                        }
                     }}
                     showTerritory={showTerritory}
                     onToggleTerritory={() => {
@@ -2326,10 +2376,10 @@ const App: React.FC = () => {
                             const currentItem = gameState.history[gameState.reviewIndex];
                             const boardToAnalyze = currentItem ? currentItem.board : gameState.board;
                             // Make sure to determine the correct next player
-                            const playerToAnalyze = currentItem 
-                                ? (currentItem.currentPlayer === 'black' ? 'white' : 'black') 
+                            const playerToAnalyze = currentItem
+                                ? (currentItem.currentPlayer === 'black' ? 'white' : 'black')
                                 : gameState.currentPlayer;
-                            
+
                             webAiEngine.requestAnalysis(
                                 boardToAnalyze,
                                 playerToAnalyze,
@@ -2340,18 +2390,18 @@ const App: React.FC = () => {
                         }
                     }}
                 />
-           </div>
+            </div>
 
-           {/* --- Modals --- */}
-           <TutorialModal 
-               isOpen={showTutorial} 
-               onClose={() => {
-                   setShowTutorial(false);
-                   localStorage.setItem('cute_go_tutorial_seen', 'true');
-               }} 
-           />
+            {/* --- Modals --- */}
+            <TutorialModal
+                isOpen={showTutorial}
+                onClose={() => {
+                    setShowTutorial(false);
+                    localStorage.setItem('cute_go_tutorial_seen', 'true');
+                }}
+            />
 
-           <SettingsModal 
+            <SettingsModal
                 isOpen={showMenu}
                 onClose={() => setShowMenu(false)}
                 currentGameSettings={useMemo(() => ({
@@ -2376,19 +2426,19 @@ const App: React.FC = () => {
                 isElectronAvailable={isElectronAvailable}
                 separatePieces={settings.separatePieces}
                 setSeparatePieces={settings.setSeparatePieces}
-           />
+            />
 
-           <SkinShopModal 
+            <SkinShopModal
                 isOpen={showSkinShop}
                 onClose={() => setShowSkinShop(false)}
                 currentBoardSkin={settings.boardSkin}
                 currentStoneSkin={settings.stoneSkin}
                 onSetBoardSkin={settings.setBoardSkin}
                 onSetStoneSkin={settings.setStoneSkin}
-           />
+            />
 
-           {showTsumegoList && (
-                <TsumegoListModal 
+            {showTsumegoList && (
+                <TsumegoListModal
                     onClose={() => setShowTsumegoList(false)}
                     onSelectSet={handleSelectTsumegoSet}
                     collection={tsumegoCollection}
@@ -2399,83 +2449,83 @@ const App: React.FC = () => {
                         setShowTsumegoList(false);
                     }}
                 />
-           )}
+            )}
 
-           <UserPage 
-               isOpen={showUserPage}
-               onClose={() => setShowUserPage(false)}
-               session={session}
-               userProfile={userProfile}
-               achievementsList={achievementsList}
-               userAchievements={userAchievements}
+            <UserPage
+                isOpen={showUserPage}
+                onClose={() => setShowUserPage(false)}
+                session={session}
+                userProfile={userProfile}
+                achievementsList={achievementsList}
+                userAchievements={userAchievements}
                 onLoginClick={() => { setShowLoginModal(true); setShowUserPage(false); }}
-               onSignOutClick={handleSignOut}
-               onTapTapLeaderboardClick={() => {
-                   if (userProfile?.elo) {
-                       submitTapTapElo(userProfile.elo);
-                   }
-                   openTapTapLeaderboard();
-               }}
+                onSignOutClick={handleSignOut}
+                onTapTapLeaderboardClick={() => {
+                    if (userProfile?.elo) {
+                        submitTapTapElo(userProfile.elo);
+                    }
+                    openTapTapLeaderboard();
+                }}
                 onUpdateNickname={handleUpdateNickname}
-           />
+            />
 
-           <SkinShopModal 
-               isOpen={showSkinShop}
-               onClose={() => setShowSkinShop(false)}
-               currentBoardSkin={settings.boardSkin}
-               currentStoneSkin={settings.stoneSkin}
-               onSetBoardSkin={settings.setBoardSkin}
-               onSetStoneSkin={settings.setStoneSkin}
-           />
+            <SkinShopModal
+                isOpen={showSkinShop}
+                onClose={() => setShowSkinShop(false)}
+                currentBoardSkin={settings.boardSkin}
+                currentStoneSkin={settings.stoneSkin}
+                onSetBoardSkin={settings.setBoardSkin}
+                onSetStoneSkin={settings.setStoneSkin}
+            />
 
-           <OnlineMenu 
-               isOpen={showOnlineMenu}
-               onClose={() => setShowOnlineMenu(false)}
-               isMatching={isMatching}
-               onCancelMatch={cancelMatchmaking}
-               onStartMatch={startMatchmaking}
-               matchBoardSize={matchBoardSize}
-               matchTime={matchTime}
-               gameType={settings.gameType}
-               peerId={peerId}
-               isHostReady={isHostReady}
-               onCopyId={() => { navigator.clipboard.writeText(peerId); setCopied(true); setTimeout(() => setCopied(false), 2000); vibrate(10); }}
-               isCopied={copied}
-               remotePeerId={remotePeerId}
-               setRemotePeerId={setRemotePeerId}
-               onJoinRoom={joinRoom}
-               onlineStatus={onlineStatus}
-           />
+            <OnlineMenu
+                isOpen={showOnlineMenu}
+                onClose={() => setShowOnlineMenu(false)}
+                isMatching={isMatching}
+                onCancelMatch={cancelMatchmaking}
+                onStartMatch={startMatchmaking}
+                matchBoardSize={matchBoardSize}
+                matchTime={matchTime}
+                gameType={settings.gameType}
+                peerId={peerId}
+                isHostReady={isHostReady}
+                onCopyId={() => { navigator.clipboard.writeText(peerId); setCopied(true); setTimeout(() => setCopied(false), 2000); vibrate(10); }}
+                isCopied={copied}
+                remotePeerId={remotePeerId}
+                setRemotePeerId={setRemotePeerId}
+                onJoinRoom={joinRoom}
+                onlineStatus={onlineStatus}
+            />
 
-           <ImportExportModal 
-               isOpen={showImportModal}
-               onClose={() => setShowImportModal(false)}
-               importKey={importKey}
-               setImportKey={setImportKey}
-                onImport={() => { 
+            <ImportExportModal
+                isOpen={showImportModal}
+                onClose={() => setShowImportModal(false)}
+                importKey={importKey}
+                setImportKey={setImportKey}
+                onImport={() => {
                     // Try SGF first
                     if (importKey.trim().startsWith('(;')) {
-                         const sgfState = parseSGF(importKey);
-                         if (sgfState) {
-                             gameState.setBoard(sgfState.board);
-                             gameState.setCurrentPlayer(sgfState.currentPlayer);
-                             settings.setGameType(sgfState.gameType);
-                             settings.setBoardSize(sgfState.boardSize);
-                             gameState.setBlackCaptures(sgfState.blackCaptures);
-                             gameState.setWhiteCaptures(sgfState.whiteCaptures);
-                             // HISTORY & SETUP
-                             gameState.setHistory(sgfState.history); 
-                             setInitialStones(sgfState.initialStones); // Restore initial stones
+                        const sgfState = parseSGF(importKey);
+                        if (sgfState) {
+                            gameState.setBoard(sgfState.board);
+                            gameState.setCurrentPlayer(sgfState.currentPlayer);
+                            settings.setGameType(sgfState.gameType);
+                            settings.setBoardSize(sgfState.boardSize);
+                            gameState.setBlackCaptures(sgfState.blackCaptures);
+                            gameState.setWhiteCaptures(sgfState.whiteCaptures);
+                            // HISTORY & SETUP
+                            gameState.setHistory(sgfState.history);
+                            setInitialStones(sgfState.initialStones); // Restore initial stones
 
-                             gameState.setGameOver(false); 
-                             gameState.setWinner(null);
-                             gameState.setConsecutivePasses(0); 
-                             gameState.setAppMode('playing');
-                             // If history exists, maybe jump to Review mode? Or stay in Playing?
-                             // User usually wants to continue or review. Let's stay in Playing at end state.
-                             setShowImportModal(false); playSfx('move'); vibrate(20);
-                             return;
-                         }
+                            gameState.setGameOver(false);
+                            gameState.setWinner(null);
+                            gameState.setConsecutivePasses(0);
+                            gameState.setAppMode('playing');
+                            // If history exists, maybe jump to Review mode? Or stay in Playing?
+                            // User usually wants to continue or review. Let's stay in Playing at end state.
+                            setShowImportModal(false); playSfx('move'); vibrate(20);
+                            return;
+                        }
                     }
 
                     // Fallback to Legacy JSON
@@ -2487,21 +2537,21 @@ const App: React.FC = () => {
                         gameState.setConsecutivePasses(0); gameState.setAppMode('playing'); setShowImportModal(false); playSfx('move'); vibrate(20);
                     } else alert('无效的棋谱格式 (支持 SGF 或 CuteGo 代码)');
                 }}
-                onCopy={() => { 
+                onCopy={() => {
                     // Changed to SGF Copy
                     // [Fix] Append current state to history for export (history lags by 1 move)
                     const fullHistory = [...gameState.history];
                     if (gameState.lastMove) {
-                         fullHistory.push({ board: gameState.board, currentPlayer: gameState.currentPlayer, lastMove: gameState.lastMove } as any);
+                        fullHistory.push({ board: gameState.board, currentPlayer: gameState.currentPlayer, lastMove: gameState.lastMove } as any);
                     }
                     const s = generateSGF(fullHistory, settings.boardSize, 7.5, initialStones);
-                    
+
                     if (navigator.clipboard && navigator.clipboard.writeText) {
                         navigator.clipboard.writeText(s).then(() => {
                             setGameCopied(true); setTimeout(() => setGameCopied(false), 2000); vibrate(10);
                         }).catch(err => {
-                             console.error('Clipboard failed', err);
-                             alert("复制失败，请手动导出 SGF");
+                            console.error('Clipboard failed', err);
+                            alert("复制失败，请手动导出 SGF");
                         });
                     } else {
                         // Fallback
@@ -2512,10 +2562,10 @@ const App: React.FC = () => {
                     // [Fix] Append current state
                     const fullHistory = [...gameState.history];
                     if (gameState.lastMove) {
-                         fullHistory.push({ board: gameState.board, currentPlayer: gameState.currentPlayer, lastMove: gameState.lastMove } as any);
+                        fullHistory.push({ board: gameState.board, currentPlayer: gameState.currentPlayer, lastMove: gameState.lastMove } as any);
                     }
                     const sgf = generateSGF(fullHistory, settings.boardSize, 7.5, initialStones);
-                    
+
                     const blob = new Blob([sgf], { type: 'application/x-go-sgf' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -2528,47 +2578,47 @@ const App: React.FC = () => {
                     vibrate(10);
                 }}
                 isCopied={gameCopied}
-           />
+            />
 
-           <EndGameModal 
-               isOpen={gameState.gameOver && !showMenu}
-               winner={gameState.winner}
-               winReason={gameState.winReason}
-               eloDiffText={eloDiffText}
-               eloDiffStyle={eloDiffStyle}
-               finalScore={gameState.finalScore}
-               onRestart={() => resetGame(true)}
-               onReview={() => { gameState.setAppMode('review'); gameState.setReviewIndex(gameState.history.length - 1); gameState.setGameOver(false); }}
-           />
-           
-           <OfflineLoadingModal 
-               isInitializing={isInitializing}
-               isElectronAvailable={isElectronAvailable}
-               isFirstRun={isFirstRun}
-               onClose={() => { setIsInitializing(false); localStorage.setItem('has_run_ai_before', 'true'); }}
-           />
+            <EndGameModal
+                isOpen={gameState.gameOver && !showMenu}
+                winner={gameState.winner}
+                winReason={gameState.winReason}
+                eloDiffText={eloDiffText}
+                eloDiffStyle={eloDiffStyle}
+                finalScore={gameState.finalScore}
+                onRestart={() => resetGame(true)}
+                onReview={() => { gameState.setAppMode('review'); gameState.setReviewIndex(gameState.history.length - 1); gameState.setGameOver(false); }}
+            />
 
-           <LoginModal 
-               isOpen={showLoginModal}
-               onClose={() => setShowLoginModal(false)}
+            <OfflineLoadingModal
+                isInitializing={isInitializing}
+                isElectronAvailable={isElectronAvailable}
+                isFirstRun={isFirstRun}
+                onClose={() => { setIsInitializing(false); localStorage.setItem('has_run_ai_before', 'true'); }}
+            />
+
+            <LoginModal
+                isOpen={showLoginModal}
+                onClose={() => setShowLoginModal(false)}
                 onLogin={handleLogin}
-               onRegister={handleRegister}
-               onTapTapLogin={handleTapTapLogin}
-           />
+                onRegister={handleRegister}
+                onTapTapLogin={handleTapTapLogin}
+            />
 
-           <AboutModal 
-               isOpen={showAboutModal}
-               onClose={() => setShowAboutModal(false)}
-               checkingUpdate={checkingUpdate}
-               updateMsg={updateMsg}
-               newVersionFound={newVersionFound}
-               downloadUrl={downloadUrl}
-               onCheckUpdate={handleCheckUpdate}
-               vibrate={vibrate}
-           />
+            <AboutModal
+                isOpen={showAboutModal}
+                onClose={() => setShowAboutModal(false)}
+                checkingUpdate={checkingUpdate}
+                updateMsg={updateMsg}
+                newVersionFound={newVersionFound}
+                downloadUrl={downloadUrl}
+                onCheckUpdate={handleCheckUpdate}
+                vibrate={vibrate}
+            />
 
             {/* Tsumego Result Modal */}
-             <TsumegoResultModal 
+            <TsumegoResultModal
                 isOpen={showTsumegoResult}
                 isCorrect={tsumegoIsCorrect}
                 message={tsumegoResultMsg}
@@ -2579,50 +2629,50 @@ const App: React.FC = () => {
                     if (!currentTsumegoLevel) return false;
                     const cat = tsumegoCategories.find(c => c.id === currentTsumegoLevel.category);
                     if (!cat) return false;
-                    
+
                     let fileList: string[] = [];
                     const currentFilename = currentTsumegoLevel.filename.replace(/\\/g, '/');
-                    
+
                     if (currentTsumegoLevel.groupName) {
                         const group = cat.children.find(c => (c as any).isGroup && c.name === currentTsumegoLevel.groupName);
                         if (group && (group as any).files) {
-                             fileList = (group as any).files;
+                            fileList = (group as any).files;
                         }
                     } else {
-                         fileList = cat.children.filter(c => !(c as any).isGroup).map(c => (c as any).file);
+                        fileList = cat.children.filter(c => !(c as any).isGroup).map(c => (c as any).file);
                     }
 
-                    const cleanCurrent = currentFilename.startsWith(cat.dirName + '/') 
-                        ? currentFilename.slice(cat.dirName.length + 1) 
+                    const cleanCurrent = currentFilename.startsWith(cat.dirName + '/')
+                        ? currentFilename.slice(cat.dirName.length + 1)
                         : currentFilename;
 
                     const idx = fileList.indexOf(cleanCurrent);
                     return idx !== -1 && idx < fileList.length - 1;
                 }, [currentTsumegoLevel, tsumegoCategories])}
-             />
+            />
 
             {/* Tsumego Hub (New) */}
             {showTsumegoLevelSelector && (
-                <TsumegoHub 
+                <TsumegoHub
                     onClose={() => setShowTsumegoLevelSelector(false)}
                     completedLevelIds={completedLevelIds}
                     onSelectLevel={async (level) => {
                         try {
                             setToastMsg("正在加载...");
                             const sgf = await fetchProblemSGF(level.filename);
-                            
+
                             setCurrentTsumegoLevel(level);
                             setShowTsumegoLevelSelector(false);
                             setShowStartScreen(false);
                             settings.setGameMode('Tsumego');
-                            
+
                             const nodes = parseSGFToTree(sgf);
                             if (!nodes || nodes.length === 0) throw new Error("Invalid SGF");
                             const root = nodes[0];
-                            
+
                             // setTsumegoLives(level.category === 'life_death' ? 2 : 99); // Remove lives
                             startTsumego(root);
-                            
+
                             vibrate(20);
                             setToastMsg(null);
                         } catch (e) {

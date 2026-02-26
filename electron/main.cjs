@@ -40,7 +40,7 @@ function createWindow() {
     console.log("Running in Development Mode");
     // 强制清除缓存
     mainWindow.webContents.session.clearCache().then(() => {
-        mainWindow.loadURL(`http://localhost:3001?t=${Date.now()}`);
+      mainWindow.loadURL(`http://localhost:3001?t=${Date.now()}`);
     });
     mainWindow.webContents.openDevTools(); // 开发模式打开控制台
   } else {
@@ -135,6 +135,14 @@ ipcMain.on("ai-command", (event, command) => {
     katagoProcess.stdin.write(command + "\n");
   } else {
     console.error("无法发送指令，KataGo 未运行");
+  }
+});
+
+ipcMain.on("stop-ai", () => {
+  if (katagoProcess) {
+    katagoProcess.kill();
+    katagoProcess = null;
+    console.log("KataGo 进程已手动终止");
   }
 });
 
